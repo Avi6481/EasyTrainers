@@ -216,11 +216,11 @@ UI.TextInput = {
 }
 
 UI.Background = {
-    MasterEnabled = true,
+    MasterEnabled = false,
 
-    SnowEnabled = true,
-    SnowPileEnabled = true,
-    SnowmanEnabled = true,
+    SnowEnabled = false,
+    SnowPileEnabled = false,
+    SnowmanEnabled = false,
 
     Gravity = 30,
     WindSway = 0.6,
@@ -233,19 +233,19 @@ UI.Background = {
     PeeColor = 0xFF88FFFF,
 
     SnowBrightness = 1.0,
-    SnowTwinkle = true,
+    SnowTwinkle = false,
     SnowflakeSizeMin = 1.2,
     SnowflakeSize = 2.0,
 
     YellowSnowChance = 0.000001,
     PeeSnowEnabled = false,
 
-    LightsEnabled = true,
+    LightsEnabled = false,
     LightSpacing = 20,
     LightRadius = 5,
     LightSpeed = 2.5,
     LightBrightness = 1.0,
-    TwinkleEnabled = true,
+    TwinkleEnabled = false,
     
     LightColor1 = 0xFFFF4040,
     LightColor2 = 0xFF40FF40,
