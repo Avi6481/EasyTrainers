@@ -15,8 +15,7 @@ local State = require("Controls/State")
 local Handler = require("Controls/Handler")
 local Restrictions = require("Controls/Restrictions")
 
-local Notification = require("UI/Elements/Notification")
-local InfoBox = require("UI/Elements/InfoBox")
+local Notification = require("UI/Panels/Notification/Notification")
 
 local VehicleLoader = require("Utils/DataExtractors/VehicleLoader")
 local WeaponLoader = require("Utils/DataExtractors/WeaponLoader")
@@ -25,7 +24,6 @@ local GeneralLoader = require("Utils/DataExtractors/GeneralLoader")
 
 local TeleportLocations = require("Features/Teleports/TeleportLocations")
 
-local WelcomeWindow = require("View/Welcome")
 local Utils
 local Weapon
 local SelfFeature
@@ -45,12 +43,6 @@ local function GetStartingState()
     GameState = Session.GetState()
 end
 
-local lastState = {
-    isLoaded = nil,
-    isPaused = nil,
-    isDead = nil,
-}
-
 local function UpdateSessionStateTick()
     local loaded = Session.IsLoaded()
     local paused = Session.IsPaused()
@@ -61,9 +53,9 @@ local function UpdateSessionStateTick()
 end
 
 local function TryLoadModules()
-    if Session.IsLoaded() and not modulesLoaded then
-        local ok = true
+    if modulesLoaded or not Session.IsLoaded() then return end
 
+    local ok, err = pcall(function()
         Utils = require("Utils")
         SelfFeature = require("Features/Self")
         SelfTick = require("Features/Self/Tick")
@@ -73,16 +65,14 @@ local function TryLoadModules()
         WorldWeather = require("Features/World/WorldWeather")
         WorldTime = require("Features/World/WorldTime")
         MainMenu = require("View/MainMenu")
-        -- this is a very cancer statement but I guess it works?
-        if not (Utils and SelfFeature and AutoTeleport and WorldWeather and WorldTime and SelfTick and Weapon and Vehicle and MainMenu) then
-            ok = false
-        end
-
-        if ok then
-            modulesLoaded = true
-            Logger.Log("Game modules initialized.")
-        end
+    end)
+    if not ok then
+        Logger.Log("Module initialization failed: " .. tostring(err))
+        return
     end
+
+    modulesLoaded = true
+    Logger.Log("Game modules initialized.")
 end
 
 local function OnSessionUpdate(state)
@@ -109,7 +99,7 @@ Event.RegisterInit(function()
     Logger.Log("Cron Started")
 
 
-    local config = JsonHelper.Read("Config/JSON/Settings.json")
+    local config = JsonHelper.LoadOrCreate("Config/JSON/Settings.json", { shown = false, Lang = "en" })
     local lang = (config and config.Lang) or "en"
     if not Language.Load(lang) then
         Logger.Log("Language failed to load, fallback to English")
@@ -157,9 +147,9 @@ Event.RegisterInit(function()
         end
     end)
 
-    Event.ObserveAfter("LocomotionAirEvents", "OnEnter", function(_, context, _)
+    Event.ObserveAfter("LocomotionAirEvents", "OnEnter", function(self, context, result)
         if modulesLoaded then
-            SelfFeature.GodMode.DisableFallFX(_, context, _)
+            SelfFeature.GodMode.DisableFallFX(self, context, result)
         end
     end)
 
@@ -173,17 +163,14 @@ Event.RegisterInit(function()
         if modulesLoaded then
             return SelfFeature.InfiniteAirDash.HandleAirDash(transition, stateContext, scriptInterface, wrappedFunc)
         end
+        return wrappedFunc(stateContext, scriptInterface)
     end)
 
 
     Event.Override("scannerDetailsGameController", "ShouldDisplayTwintoneTab", function(this, wrappedMethod)
+        if not modulesLoaded then return wrappedMethod() end
         return VehicleLoader:HandleTwinToneScan(this, wrappedMethod)
     end)
-
-    --Event.Override("VehicleObject", "OnCheckVehicleVisialCustomizationDistanceTermination", function(this, wrappedMethod)
-    --    return Vehicle.KeepCrystalCoat:BlockDisable(this, wrappedMethod)
-   -- end)
-    
 
     Logger.Log("Initialized")
 
@@ -206,30 +193,23 @@ Event.RegisterUpdate(function(dt)
     Vehicle.VehiclePreview.Update(dt)
     Vehicle.VehicleSpawning.HandlePending()
     Vehicle.VehicleNitro.Tick(dt)
+    Vehicle.VehicleSpeedometer.Update(dt)
     WorldWeather.Update()
     WorldTime.Update(dt)
 end)
 
-Event.RegisterDraw(function()
-
-    Notification.Render()
-    WelcomeWindow.Render()
+local function RenderMainMenu()
     if not modulesLoaded then return end
+
     MainMenu.Initialize()
     Handler.Update()
-    if not State.menuOpen then return end
+    MainMenu.Render()
+end
 
-    local menuX, menuY, menuW, menuH
-    ImGui.SetNextWindowSize(300, 500, ImGuiCond.FirstUseEver)
-
-    if ImGui.Begin("EasyTrainer", ImGuiWindowFlags.NoScrollbar + ImGuiWindowFlags.NoScrollWithMouse + ImGuiWindowFlags.NoTitleBar) then
-        menuX, menuY = ImGui.GetWindowPos()
-        menuW, menuH = ImGui.GetWindowSize()
-        MainMenu.Render(menuX, menuY, menuW, menuH)
-        ImGui.End()
-    end
-
-    InfoBox.Render(menuX, menuY, menuW, menuH)
+Event.RegisterDraw(function()
+    Notification.Render()
+    if modulesLoaded then Vehicle.VehicleSpeedometer.Render() end
+    RenderMainMenu()
 end)
 
 Event.RegisterShutdown(function()

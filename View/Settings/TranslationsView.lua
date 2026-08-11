@@ -8,38 +8,42 @@ local langFolder = "lang" -- Leaving this here so other authors don't have to ad
 
 local config
 local availableLangs = {}
-local selectedLangIndex = 1
 local languageRadio = { index = 1 }
 local languageOptions = {}
 local initialized = false 
 
 local function LoadAvailableLanguages()
-    availableLangs = {}
+    availableLangs = Language.GetAvailable(langFolder)
     languageOptions = {}
-    config = JsonHelper.Read(configPath) or { Lang = "en" }
+    config = JsonHelper.LoadOrCreate(configPath, { shown = false, Lang = "en" }) or { Lang = "en" }
+    local selectedLangIndex = 1
+    local currentCode = config.Lang or Language.GetCurrentCode()
 
-    local files = dir(langFolder) or {}
-    for _, file in ipairs(files) do
-        local filename = type(file) == "table" and file.name or file
-        if type(filename) == "string" and filename:match("%.json$") then
-            local langName = filename:gsub("%.json$", "")
-            table.insert(availableLangs, langName)
-            table.insert(languageOptions, langName)
-            if langName == config.Lang then
-                selectedLangIndex = #availableLangs
-            end
+    for index, language in ipairs(availableLangs) do
+        table.insert(languageOptions, language.name)
+        if language.code == currentCode then
+            selectedLangIndex = index
         end
     end
+
     languageRadio.index = selectedLangIndex
 end
 
-local function SetLanguage(lang)
-    config.Lang = lang
-    JsonHelper.Write(configPath, config)
-    Language.Load(lang)
+local function SetLanguage(language)
+    if not language or not Language.Load(language.code) then
+        Notification.Error(L("languagemenu.loadfailed"))
+        return
+    end
+
+    config.Lang = language.code
+    local saved = JsonHelper.Write(configPath, config)
+    if not saved then
+        Notification.Warning(L("languagemenu.savefailed"))
+        return
+    end
 
     local loadMessage = Language.Get("loadmessage")
-    if loadMessage and loadMessage ~= "" then
+    if loadMessage ~= "" then
         Notification.Success(loadMessage)
     end
 end
@@ -55,15 +59,17 @@ local function LanguageMenuView()
     end)
 
     Buttons.Break(L("languagemenu.tip"))
+    Buttons.Break(L("languagemenu.current") .. ": " .. Language.GetCurrentName())
+    if #availableLangs <= 1 then
+        Buttons.Break(L("languagemenu.onlyone"))
+    end
 
     Buttons.Radio("", languageRadio, languageOptions, "", function()
-        local lang = availableLangs[languageRadio.index]
-        selectedLangIndex = languageRadio.index
-        SetLanguage(lang)
+        SetLanguage(availableLangs[languageRadio.index])
     end)
 end
 
 return {
-    title = "Translations",
+    title = "languagemenu.title",
     view = LanguageMenuView
 }

@@ -26,6 +26,7 @@ function ForceGun.Tick(dt)
     if heldTarget and Weapon.IsPlayerShooting() then
         local camOrigin = player:GetWorldPosition()
         local lookAt = targetingSystem:GetLookAtPosition(player, true, false)
+        if not lookAt then heldTarget = nil return end
 
         local dir = {
             x = lookAt.x - camOrigin.x,
@@ -33,6 +34,7 @@ function ForceGun.Tick(dt)
             z = lookAt.z - camOrigin.z
         }
         local mag = math.sqrt(dir.x^2 + dir.y^2 + dir.z^2)
+        if mag < 0.001 then heldTarget = nil return end
         dir.x, dir.y, dir.z = dir.x / mag, dir.y / mag, dir.z / mag
 
         local impulse = Vector3.new(
@@ -41,7 +43,7 @@ function ForceGun.Tick(dt)
             dir.z * launchPower
         )
 
-        Force.ApplyImpulse(heldTarget, impulse)
+        pcall(Force.ApplyImpulse, heldTarget, impulse)
         
         heldTarget = nil
     end

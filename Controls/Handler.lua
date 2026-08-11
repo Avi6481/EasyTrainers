@@ -2,10 +2,8 @@ local Logger = require("Core/Logger")
 local State = require("Controls/State")
 local Bindings = require("Controls/Bindings")
 local Restrictions = require("Controls/Restrictions")
-local Navigation = require("Controls/Navigation")
 local Cursor = require("Controls/Cursor")
-
-local SubmenuManager = require("UI/Core/SubmenuManager")
+local OptionConfig = require("Config/OptionConfig")
 
 local Handler = {}
 
@@ -51,6 +49,8 @@ function Handler.Update()
     if State.bindingKey then
         return
     end
+
+    if OptionConfig.Registry.UpdateHotkeys() then OptionConfig.Save() end
 
 
     if Bindings.IsActionDown("TOGGLE") and now - lastTick.toggle > Handler.scrollDelayBase then
@@ -109,7 +109,6 @@ function Handler.Update()
 
     if Bindings.IsActionDown("BACK") and now - lastTick.back > Handler.scrollDelayBase then
         State.backPressed = true
-        SubmenuManager.CloseSubmenu()
         lastTick.back = now
     end
 
@@ -122,7 +121,6 @@ function Handler.Update()
         State.ToggleMouse()
         lastTick.toggleMouse = now
     end
-    Navigation.ApplyNavigation()
 end
 
 return Handler

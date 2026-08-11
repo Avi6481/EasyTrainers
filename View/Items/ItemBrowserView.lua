@@ -1,166 +1,254 @@
 local UI = require("UI")
 local Buttons = UI.Buttons
-local Logger = require("Core/Logger")
+local SidePanel = UI.SidePanel
+local Notification = UI.Notification
 local GeneralLoader = require("Utils/DataExtractors/GeneralLoader")
+local Items = require("Features/Items")
 local ItemsView = require("View/Items/ItemsView")
-local Inventory = require("Utils").Inventory
 
+local State = Items.BrowserState
+local initialized = false
+local categorized = {}
 local filters = {
-    quality = { index = 2 }, -- Start at common so it doesn't lag too much
-    tag = { index = 1 },
-    coreCW  = { value = false },
-    craftable = { value = false }
+    Quality = { index = 1 },
+    CraftableOnly = { value = false },
+}
+local search = { value = "", capturing = false }
 
+local categoryGroups = {
+    { Name = "Cyberware", Keys = { "Cyberware" }, Tip = "Operating systems, implants, optics, and other cyberware." },
+    { Name = "Consumables", Keys = { "Consumables" }, Tip = "Food, drinks, medicine, boosters, and inhalers." },
+    { Name = "Crafting & Upgrades", Keys = { "CraftingMaterials" }, Tip = "Crafting, quickhack, upgrade, and attachment materials." },
+    { Name = "Weapon Mods", Keys = { "WeaponMods" }, Tip = "Attachments and modifications for ranged and melee weapons." },
+    { Name = "Skills & Progression", Keys = { "SkillShards", "CyberdeckShards" }, Tip = "Skill books, progression shards, and cyberdeck upgrades." },
+    { Name = "Rewards & Currency", Keys = { "Reward" }, Tip = "Currency, reward containers, chips, and payout items." },
+    { Name = "Quest Items", Keys = { "Quest" }, Tip = "Items tagged for missions and story progression." },
+    { Name = "Readables", Keys = { "Readables" }, Tip = "Shards, fragments, and readable database items." },
+    { Name = "Miscellaneous", Keys = { "Miscellaneous" }, Tip = "Junk, props, valuables, and novelty items." },
+    { Name = "Advanced", Keys = { "Uncategorized" }, Tip = "Items whose game tags do not fit the curated categories." },
 }
 
-local categorizedCache = nil
-local initialized = false
+local function Friendly(value)
+    value = tostring(value or "Other"):gsub("_", " ")
+    value = value:gsub("(%l)(%u)", "%1 %2")
+    return value
+end
 
-local function EnsureInitialized()
-    if not initialized then
-        GeneralLoader:LoadAll()
-        categorizedCache = GeneralLoader:Categorize()
-        initialized = true
-    end
+local function QualityName(value)
+    return Friendly(tostring(value or "Standard"):match("([^.]+)$"))
+end
+
+local function IsFocused(data)
+    return data and data.Visible and (data.Selected or data.Hovered)
+end
+
+local function EnsureInitialized(force)
+    if initialized and not force then return end
+    if force or #GeneralLoader:GetAll() == 0 then GeneralLoader:LoadAll() end
+    categorized = GeneralLoader:Categorize()
+    initialized = true
+end
+
+local function DrawControls()
+    Buttons.Dropdown("Inventory Action", State.Action, State.Actions,
+        "Choose whether selecting an item adds it to or removes it from your inventory.")
+    Buttons.Int("Quantity", State.Quantity, "Amount applied each time you select an item.")
+end
+
+local function SubmitItemInfo(item, category, group)
+    SidePanel.SubmitInfo("item-record", {
+        Eyebrow = "ITEM DATABASE",
+        Title = item.name or item.id or "Unknown Item",
+        Rows = {
+            { Label = "Category", Value = category or "Other" },
+            { Label = "Group", Value = Friendly(group) },
+            { Label = "Quality", Value = QualityName(item.quality) },
+            { Label = "Owned", Value = tostring(State.GetOwned(item.id)) },
+            { Label = "Action", Value = State.GetAction() .. " " .. tostring(State.Quantity.value) },
+        },
+        Description = item.id,
+    }, { Width = 320 })
+end
+
+local function DrawItem(item, category, group, right)
+    local _, data = Buttons.OptionExtended(item.name or item.id, "", right or State.GetSummary(),
+        "Apply the selected inventory action to this item.", function()
+            State.Apply(item)
+        end)
+    if IsFocused(data) then SubmitItemInfo(item, category, group) end
+end
+
+local function Sorted(items)
+    local result = {}
+    for _, item in ipairs(items or {}) do table.insert(result, item) end
+    table.sort(result, function(a, b)
+        return (a.name or a.id or ""):lower() < (b.name or b.id or ""):lower()
+    end)
+    return result
 end
 
 local function BuildQualities(items)
-    local list, seen = { "All" }, {}
-    for _, it in ipairs(items) do
-        if it.quality and not seen[it.quality] then
-            seen[it.quality] = true
-            table.insert(list, it.quality)
+    local result, seen = { "All" }, {}
+    for _, item in ipairs(items) do
+        local name = QualityName(item.quality)
+        if name ~= "Standard" and not seen[name] then
+            seen[name] = true
+            table.insert(result, name)
         end
     end
-    return list
+    table.sort(result, function(a, b)
+        if a == "All" then return true end
+        if b == "All" then return false end
+        return a < b
+    end)
+    return result
 end
 
-local function BuildTags(items)
-    local list, seen = { "All" }, {}
-    for _, it in ipairs(items) do
-        if it.tags then
-            for _, t in ipairs(it.tags) do
-                if not seen[t] then
-                    seen[t] = true
-                    table.insert(list, t)
-                end
+local function ItemListView(context)
+    local qualities = BuildQualities(context.Items)
+    filters.Quality.index = math.min(filters.Quality.index or 1, #qualities)
+
+    DrawControls()
+    Buttons.Dropdown("Quality", filters.Quality, qualities, "Limit this list to a specific item quality.")
+    Buttons.Toggle("Craftable Only", filters.CraftableOnly, "Only show records marked as craftable.")
+
+    local visible = {}
+    local selectedQuality = qualities[filters.Quality.index or 1]
+    for _, item in ipairs(context.Items) do
+        local qualityMatches = selectedQuality == "All" or QualityName(item.quality) == selectedQuality
+        local craftableMatches = not filters.CraftableOnly.value or item.isCraftable
+        if qualityMatches and craftableMatches then table.insert(visible, item) end
+    end
+
+    Buttons.Break("", Friendly(context.Group) .. "  /  " .. tostring(#visible))
+    for _, item in ipairs(Sorted(visible)) do
+        DrawItem(item, context.Category, context.Group, QualityName(item.quality))
+    end
+end
+
+local function CollectSubcategories(group)
+    local result = {}
+    for _, key in ipairs(group.Keys) do
+        for name, items in pairs(categorized[key] or {}) do
+            if #items > 0 then
+                local bucket = result[name] or {}
+                for _, item in ipairs(items) do table.insert(bucket, item) end
+                result[name] = bucket
             end
         end
     end
-    return list
+    return result
 end
 
-local function PassesFilters(item, parent, qualities, tags)
-    if parent == "Cyberware" and filters.coreCW.value and not item.isCoreCW then
-        return false
+local function CategoryView(group)
+    local subcategories = CollectSubcategories(group)
+    local names = {}
+    for name, items in pairs(subcategories) do
+        if #items > 0 then table.insert(names, name) end
     end
+    table.sort(names, function(a, b) return Friendly(a) < Friendly(b) end)
 
-    local q = qualities[filters.quality.index or 1]
-    if q and q ~= "All" and item.quality ~= q then
-        return false
+    for _, name in ipairs(names) do
+        local currentName = name
+        local items = subcategories[currentName]
+        local menu = {
+            title = Friendly(currentName),
+            view = function()
+                ItemListView({ Category = group.Name, Group = currentName, Items = items })
+            end,
+        }
+        Buttons.Submenu(Friendly(currentName), menu, tostring(#items) .. " available items")
     end
-
-    local t = tags[filters.tag.index or 1]
-    if t and t ~= "All" then
-        local match = false
-        for _, tag in ipairs(item.tags or {}) do
-            if tag == t then
-                match = true
-                break
-            end
-        end
-        if not match then return false end
-    end
-
-    if not filters.craftable.value and item.isCraftable then
-        return false
-    end
-
-    return true
 end
 
--- Subcategory view
-local function ItemSubcategoryView(context)
-    local parent, sub, items = context.parent, context.sub, context.items
-
-    local qualities = BuildQualities(items)
-    local tags      = BuildTags(items)
-
-    if parent == "Cyberware" then
-        Buttons.Toggle("Core Cyberware Only", filters.coreCW)
-    end
-
-    Buttons.StringCycler("Quality", filters.quality, qualities)
-    Buttons.StringCycler("Tag", filters.tag, tags)
-    Buttons.Toggle("Show Craftable Items", filters.craftable, "Toggle to show items marked as craftable")
-
-    Buttons.Break("", sub .. " (" .. tostring(#items) .. ")")
-
-    for _, it in ipairs(items) do
-        if PassesFilters(it, parent, qualities, tags) then
-            Buttons.Option(it.id, "Give item: " .. it.name, function()
-                Inventory.GiveItem(it.id, 1)
-            end)
+local function CatalogView()
+    for _, group in ipairs(categoryGroups) do
+        local current = group
+        local subcategories = CollectSubcategories(current)
+        local count = 0
+        for _, items in pairs(subcategories) do count = count + #items end
+        if count > 0 then
+            local menu = { title = current.Name, view = function() CategoryView(current) end }
+            Buttons.Submenu(current.Name, menu, current.Tip)
         end
     end
 end
-
-local function ItemParentView(context)
-    local parent, subcats = context.parent, context.subcats
-
-    for sub, items in pairs(subcats) do
-        if #items > 0 then
-            local subMenu = {
-                title = sub,
-                view  = function() ItemSubcategoryView({ parent = parent, sub = sub, items = items }) end
-            }
-            Buttons.Submenu(sub, subMenu, "Browse " .. sub)
-        end
-    end
-end
-
-local searchRef = { value = "Junk", capturing = false }
 
 local function SearchView()
+    DrawControls()
+    Buttons.Text("Search Name or Item ID", search,
+        "Searches both the display name and the internal item ID.")
 
-    Buttons.Text("Search Item ID", searchRef, "Type part of an item ID to filter items. Default: Junk")
-    Buttons.Break("", "Search results for: " .. (searchRef.value or ""))
-
-    local term = (searchRef.value or ""):lower()
-    if term == "" then return end
-
-    for _, items in pairs(categorizedCache) do
-        for _, subitems in pairs(items) do
-            for _, it in ipairs(subitems) do
-                if it.id and it.id:lower():find(term, 1, true) then
-                    Buttons.Option(it.id, "Give item: " .. it.name, function()
-                        Logger.Log("Give item: " .. it.id)
-                    end)
-                end
+    local term = (search.value or ""):lower()
+    local results = {}
+    if term ~= "" then
+        for _, item in ipairs(GeneralLoader:GetAll()) do
+            local name = (item.name or ""):lower()
+            local id = (item.id or ""):lower()
+            if name:find(term, 1, true) or id:find(term, 1, true) then
+                table.insert(results, item)
             end
         end
     end
-end
-local searchMenu = { title = "Search by ID", view = SearchView }
-
--- Main view
-local function ItemMainView()
-    EnsureInitialized()
-    Buttons.Submenu("Essentials Items", ItemsView, "Give all, recipes, and consumables")
-    Buttons.Submenu("Search by ID", searchMenu, "Search items by ID substring")
-
-    Buttons.Break("", "Item Browser(Alpha)")
-    
-    for parent, subcats in pairs(categorizedCache) do
-        local parentMenu = {
-            title = parent,
-            view  = function() ItemParentView({ parent = parent, subcats = subcats }) end
-        }
-        Buttons.Submenu(parent, parentMenu, "Browse " .. parent)
+    results = Sorted(results)
+    Buttons.Break("", term == "" and "Enter a name or item ID" or (tostring(#results) .. " Results"))
+    for index, item in ipairs(results) do
+        if index > 250 then break end
+        DrawItem(item, "Search", "Results", QualityName(item.quality))
     end
 end
 
-return {
-    title = "Items Menu",
-    view  = ItemMainView
-}
+local function InventoryView()
+    DrawControls()
+    Buttons.Option("Refresh Inventory", "Refresh item quantities from your current inventory.", function()
+        State.RefreshInventory()
+        Notification.Info("Inventory refreshed", 2)
+    end)
+
+    local owned = State.GetInventory()
+    table.sort(owned, function(a, b) return (a.name or a.id):lower() < (b.name or b.id):lower() end)
+    Buttons.Break("", "Owned Items  /  " .. tostring(#owned))
+    for _, entry in ipairs(owned) do
+        local item = GeneralLoader:GetById(entry.id) or entry
+        item.name = item.name or entry.name
+        DrawItem(item, "Inventory", "Owned", "x" .. tostring(entry.quantity or 1))
+    end
+end
+
+local catalogMenu = { title = "Item Catalog", view = CatalogView }
+local searchMenu = { title = "Search Items", view = SearchView }
+local inventoryMenu = { title = "My Inventory", view = InventoryView }
+
+local function ItemMainView()
+    EnsureInitialized()
+    DrawControls()
+    Buttons.Break("", "Browse & Manage")
+    Buttons.Submenu("Essentials", ItemsView, "Quick kits, crafting components, consumables, buffs, and recipes.")
+    Buttons.Submenu("Browse Catalog", catalogMenu, "Browse a curated item catalog by purpose and type.")
+    Buttons.Submenu("Search Items", searchMenu, "Find an item by its display name or internal ID.")
+    Buttons.Submenu("My Inventory", inventoryMenu, "Review, add, or remove items you currently own.", function()
+        State.Action.index = 2
+        State.RefreshInventory()
+    end)
+    Buttons.Break("", "Quick Add")
+    Buttons.OptionExtended("Crafting Component Kit", "", "+" .. tostring(State.Quantity.value),
+        "Add every standard crafting component using the selected quantity.", function()
+            Items.Actions.GiveAllCraftingComponents(State.Quantity.value)
+            State.RefreshInventory()
+            Notification.Success("Crafting component kit added", 2)
+        end)
+    Buttons.OptionExtended("MaxDoc Kit", "", "+" .. tostring(State.Quantity.value),
+        "Add every MaxDoc tier using the selected quantity.", function()
+            Items.Actions.GiveMaxDocs(State.Quantity.value)
+            State.RefreshInventory()
+            Notification.Success("MaxDoc kit added", 2)
+        end)
+    Buttons.Break("", "Database")
+    Buttons.Option("Reload Item Database", "Rebuild the item catalog from the current game records.", function()
+        EnsureInitialized(true)
+        State.RefreshInventory()
+        Notification.Success("Item database reloaded", 2)
+    end)
+end
+
+return { title = "Items", view = ItemMainView }

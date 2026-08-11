@@ -29,7 +29,14 @@ Bindings.DefaultActions = {
 
     TOGGLE = { keys = { Input.VK.F4 }, btns = { Input.GP.RIGHT_BUMPER, Input.GP.A } },
     --I don't think we need a Mouse toggle on controller OR! do we. Could maybe implement the cursor through the right stick maybe in the future.
-    TOGGLE_MOUSE = { keys = { Input.VK.X }, btns = { } }
+    TOGGLE_MOUSE = { keys = { Input.VK.X }, btns = { } },
+    NOCLIP_UP = { keys = { Input.VK.SPACE }, btns = { Input.GP.RIGHT_BUMPER } },
+    NOCLIP_DOWN = { keys = { Input.VK.CTRL }, btns = { Input.GP.LEFT_BUMPER } },
+    NOCLIP_BOOST = { keys = { Input.VK.SHIFT }, btns = { Input.GP.LEFT_STICK } },
+    NOCLIP_FORWARD = { keys = { Input.VK.W }, btns = {} },
+    NOCLIP_BACKWARD = { keys = { Input.VK.S }, btns = {} },
+    NOCLIP_LEFT = { keys = { Input.VK.A }, btns = {} },
+    NOCLIP_RIGHT = { keys = { Input.VK.D }, btns = {} },
 }
 
 Bindings.Actions = {}
@@ -75,7 +82,7 @@ end
 ---@param action string
 ---@param newBinding table { keys? = {..}, btns? = {..} }
 function Bindings.Rebind(action, newBinding)
-    if not Bindings.Actions[action] then return false end
+    if not Bindings.Actions[action] then Bindings.Actions[action] = { keys = {}, btns = {} } end
     if newBinding.keys then
         Bindings.Actions[action].keys = normalize(newBinding.keys)
     end
@@ -84,6 +91,11 @@ function Bindings.Rebind(action, newBinding)
     end
     -- BindingsConfig.Save() It's only used in bindbuttons so it already saves when it's binded successfully so there's no point of having it here
     return true
+end
+
+function Bindings.EnsureAction(action)
+    if not Bindings.Actions[action] then Bindings.Actions[action] = { keys = {}, btns = {} } end
+    return Bindings.Actions[action]
 end
 
 function Bindings.ResetAction(action)

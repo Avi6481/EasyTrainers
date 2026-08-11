@@ -1,39 +1,50 @@
 local ConfigManager = require("Config/OptionConfig")
 local Weapons = require("Features/Weapons")
 
+local function Toggle(id, ref, labelKey, keywords)
+    return ConfigManager.DefineToggle(id, ref, false, {
+        LabelKey = labelKey,
+        Category = "weapon",
+        Keywords = keywords,
+    })
+end
+
 local function RegisterAllWeaponOptions()
+    local Modifiers = Weapons.StatModifiers
 
-    ConfigManager.Register("toggle.weapon.infiniteammo", Weapons.InfiniteAmmo.enabled, false)
-    ConfigManager.Register("toggle.weapon.forcegun", Weapons.ForceGun.enabled, false)
-    ConfigManager.Register("toggle.weapon.flyingthundergod", Weapons.FlyingThunderGod.enabled, false)
-    ConfigManager.Register("toggle.weapon.gravitygun", Weapons.GravityGun.enabled, false)
-    ConfigManager.Register("toggle.weapon.smartbladereturn", Weapons.SmartBlade.enabled, false)
-    ConfigManager.Register("toggle.weapon.teleygun", Weapons.TeleportShot.enabled, false)
-    ConfigManager.Register("toggle.weapon.explosivebullets", Weapons.ExplosiveBullets.enabled, false)
+    ConfigManager.RegisterAll({
+        Toggle("toggle.weapon.infiniteammo", Weapons.InfiniteAmmo.enabled, "weaponsmenu.infiniteammo.label", { "ammo", "bullets" }),
+        Toggle("toggle.weapon.forcegun", Weapons.ForceGun.enabled, "weaponsmenu.forcegun.label", { "force", "physics" }),
+        Toggle("toggle.weapon.flyingthundergod", Weapons.FlyingThunderGod.enabled, "weaponsmenu.flyingthundergod.label", { "teleport", "knife" }),
+        Toggle("toggle.weapon.gravitygun", Weapons.GravityGun.enabled, "weaponsmenu.gravitygun.label", { "gravity", "physics" }),
+        Toggle("toggle.weapon.smartbladereturn", Weapons.SmartBlade.enabled, "weaponsmenu.smartbladereturn.label", { "knife", "return" }),
+        Toggle("toggle.weapon.teleygun", Weapons.TeleportShot.enabled, "weaponsmenu.teleygun.label", { "teleport", "shot" }),
+        Toggle("toggle.weapon.explosivebullets", Weapons.ExplosiveBullets.enabled, "weaponsmenu.explosivebullets.label", { "explosion", "ammo" }),
+        Toggle("toggle.weapon.explosiveknives", Weapons.ExplosiveKnives.enabled, "weaponsmenu.explosiveknives.label", { "explosion", "knife" }),
 
-    ConfigManager.Register("toggle.weapon.noreload", Weapons.StatModifiers.NoReloading.toggleNoReloading, false)
-    ConfigManager.Register("toggle.weapon.speedcola", Weapons.StatModifiers.FastReload.toggleFastReload, false)
-    ConfigManager.Register("toggle.weapon.norecoil", Weapons.StatModifiers.NoRecoil.toggleNoRecoil, false)
-    ConfigManager.Register("toggle.weapon.rapidfire", Weapons.StatModifiers.RapidFire.toggleRapidFire, false)
-    ConfigManager.Register("toggle.weapon.shotgunspray", Weapons.StatModifiers.ShotgunSpray.toggleShotgunSpray, false)
+        Toggle("toggle.weapon.noreload", Modifiers.NoReloading.toggleNoReloading, "weaponsmenu.noreload.label", { "reload", "magazine" }),
+        Toggle("toggle.weapon.speedcola", Modifiers.FastReload.toggleFastReload, "weaponsmenu.speedcola.label", { "reload", "speed" }),
+        Toggle("toggle.weapon.norecoil", Modifiers.NoRecoil.toggleNoRecoil, "weaponsmenu.norecoil.label", { "recoil", "accuracy" }),
+        Toggle("toggle.weapon.rapidfire", Modifiers.RapidFire.toggleRapidFire, "weaponsmenu.rapidfire.label", { "fire rate", "speed" }),
+        Toggle("toggle.weapon.shotgunspray", Modifiers.ShotgunSpray.toggleShotgunSpray, "weaponsmenu.shotgunspray.label", { "shotgun", "pellets" }),
+        Toggle("toggle.weapon.alwayscrit", Modifiers.AlwaysCrit.toggleAlwaysCrit, "weaponsmenu.alwayscrit.label", { "critical", "damage" }),
+        Toggle("toggle.weapon.insanecritdmg", Modifiers.InsaneCritDmg.toggleInsaneCritDmg, "weaponsmenu.insanecritdmg.label", { "critical", "damage" }),
 
-    ConfigManager.Register("toggle.weapon.alwayscrit", Weapons.StatModifiers.AlwaysCrit.toggleAlwaysCrit, false)
-    ConfigManager.Register("toggle.weapon.insanecritdmg", Weapons.StatModifiers.InsaneCritDmg.toggleInsaneCritDmg, false)
+        Toggle("toggle.weapon.melee_highblock", Modifiers.HighBlock.toggleHighBlock, "weaponsmenu.melee_highblock.label", { "melee", "block" }),
+        Toggle("toggle.weapon.melee_lowstamina", Modifiers.LowStaminaCost.toggleLowStaminaCost, "weaponsmenu.melee_lowstamina.label", { "melee", "stamina" }),
+        Toggle("toggle.weapon.melee_bladecarnage", Modifiers.BladeCarnage.toggleBladeCarnage, "weaponsmenu.melee_bladecarnage.label", { "melee", "blade", "damage" }),
+        Toggle("toggle.weapon.melee_infinitecombo", Modifiers.InfiniteCombo.toggleInfiniteCombo, "weaponsmenu.melee_infinitecombo.label", { "melee", "combo" }),
 
-    ConfigManager.Register("toggle.weapon.melee_highblock", Weapons.StatModifiers.HighBlock.toggleHighBlock, false)
-    ConfigManager.Register("toggle.weapon.melee_lowstamina", Weapons.StatModifiers.LowStaminaCost.toggleLowStaminaCost, false)
-    ConfigManager.Register("toggle.weapon.melee_bladecarnage", Weapons.StatModifiers.BladeCarnage.toggleBladeCarnage, false)
-    ConfigManager.Register("toggle.weapon.melee_infinitecombo", Weapons.StatModifiers.InfiniteCombo.toggleInfiniteCombo, false)
+        Toggle("toggle.weapon.smart_fastlock", Modifiers.SmartFastLock.toggleFastLock, "weaponsmenu.smart_fastlock.label", { "smart", "target", "lock" }),
+        Toggle("toggle.weapon.smart_widelock", Modifiers.SmartWideLock.toggleWideLock, "weaponsmenu.smart_widelock.label", { "smart", "target", "angle" }),
+        Toggle("toggle.weapon.smart_extratargets", Modifiers.SmartExtraTargets.toggleExtraTargets, "weaponsmenu.smart_extratargets.label", { "smart", "target", "multiple" }),
+        Toggle("toggle.weapon.smart_perfectacc", Modifiers.SmartPerfectAcc.togglePerfectAcc, "weaponsmenu.smart_perfectacc.label", { "smart", "accuracy" }),
 
-    ConfigManager.Register("toggle.weapon.smart_fastlock", Weapons.StatModifiers.SmartFastLock.toggleFastLock, false)
-    ConfigManager.Register("toggle.weapon.smart_widelock", Weapons.StatModifiers.SmartWideLock.toggleWideLock, false)
-    ConfigManager.Register("toggle.weapon.smart_extratargets", Weapons.StatModifiers.SmartExtraTargets.toggleExtraTargets, false)
-    ConfigManager.Register("toggle.weapon.smart_perfectacc", Weapons.StatModifiers.SmartPerfectAcc.togglePerfectAcc, false)
-
-    ConfigManager.Register("toggle.weapon.unlimitedrange", Weapons.StatModifiers.UnlimitedRange.toggleUnlimitedRange, false)
-    ConfigManager.Register("toggle.weapon.penetrationrounds", Weapons.StatModifiers.PenetrationRounds.togglePenetrationRounds, false)
-    ConfigManager.Register("toggle.weapon.hipfireaccuracy", Weapons.StatModifiers.HipfireAccuracy.toggleHipfireAccuracy, false)
-    ConfigManager.Register("toggle.weapon.adsaccuracy", Weapons.StatModifiers.AdsAccuracy.toggleAdsAccuracy, false)
+        Toggle("toggle.weapon.unlimitedrange", Modifiers.UnlimitedRange.toggleUnlimitedRange, "weaponsmenu.unlimitedrange.label", { "range", "distance" }),
+        Toggle("toggle.weapon.penetrationrounds", Modifiers.PenetrationRounds.togglePenetrationRounds, "weaponsmenu.penetrationrounds.label", { "wall", "penetration", "ammo" }),
+        Toggle("toggle.weapon.hipfireaccuracy", Modifiers.HipfireAccuracy.toggleHipfireAccuracy, "weaponsmenu.hipfireaccuracy.label", { "hip fire", "accuracy" }),
+        Toggle("toggle.weapon.adsaccuracy", Modifiers.AdsAccuracy.toggleAdsAccuracy, "weaponsmenu.adsaccuracy.label", { "aim", "sights", "accuracy" }),
+    })
 end
 
 return RegisterAllWeaponOptions

@@ -1,5 +1,6 @@
 local UI = require("UI")
 local Buttons = UI.Buttons
+local SidePanel = UI.SidePanel
 local Inventory = require("Utils").Inventory
 local WeaponLoader = require("Utils/DataExtractors/WeaponLoader")
 
@@ -14,6 +15,7 @@ local modeOptions = {
 
 local actionMode = { index = 1 }
 local actionOptions = { "weaponsitems.addweapon", "weaponsitems.removeweapon" }
+local quantity = { value = 1, min = 1, max = 50, step = 1 }
 
 local selectedSort = { index = 1 }
 local sortModes = { "weaponsitems.quantityH", "weaponsitems.quantityL", "weaponsitems.rarity" }
@@ -26,6 +28,38 @@ local matchedWeapons = {}
 local weaponTypes = {}
 local initialized = false
 local selectedCategory = ""
+
+local function IsRemoving()
+    return actionOptions[actionMode.index or 1] == "weaponsitems.removeweapon"
+end
+
+local function ApplyWeapon(weapon, amount)
+    amount = amount or quantity.value
+    if IsRemoving() then
+        return Inventory.RemoveItem(weapon.id, amount)
+    end
+    return Inventory.GiveItem(weapon.id, amount)
+end
+
+local function IsFocused(data)
+    return data and data.Visible and (data.Selected or data.Hovered)
+end
+
+local function SubmitWeaponInfo(weapon)
+    local technology = weapon.isSmart and "Smart" or weapon.isTech and "Tech" or weapon.isPower and "Power" or "Standard"
+    SidePanel.SubmitInfo("weapon-record", {
+        Eyebrow = weapon.iconic and "ICONIC WEAPON" or "WEAPON DATABASE",
+        Title = weapon.displayName or weapon.name or "Unknown Weapon",
+        Rows = {
+            { Label = "Type", Value = weapon.type or "Miscellaneous" },
+            { Label = "Rarity", Value = weapon.rarity or "Standard" },
+            { Label = "Technology", Value = technology },
+            { Label = "Manufacturer", Value = weapon.manufacturer or "Unlisted" },
+            { Label = "Stash wall", Value = weapon.onWall and "Yes" or "No" },
+        },
+        Description = weapon.id,
+    }, { Width = 320 })
+end
 
 local function MatchInventoryToKnownWeapons()
     matchedWeapons = {}
@@ -52,6 +86,10 @@ local function MatchInventoryToKnownWeapons()
                     iconic = data.iconic,
                     onWall = data.onWall,
                     type = data.type,
+                    manufacturer = data.manufacturer,
+                    isTech = data.isTech,
+                    isSmart = data.isSmart,
+                    isPower = data.isPower,
                     count = item.quantity or 1
                 }
             end
@@ -96,10 +134,12 @@ local function WeaponCategorySubmenuView()
             iconic = w.iconic and "\n" .. L("weaponsitems.iconic") or "",
             wall = w.onWall and "\n".. L("weaponsitems.wallmount") or ""
         }
-        Buttons.OptionExtended(w.displayName, "", "(" .. w.rarity .. ")", tip("weaponsitems.weaponentry.tip", tipData),
+        local summary = (IsRemoving() and "-" or "+") .. tostring(quantity.value)
+        local _, data = Buttons.OptionExtended(w.displayName, "", summary, "Apply the selected inventory action.",
             function()
-                Inventory.GiveItem(w.id, 1)
+                ApplyWeapon(w)
             end)
+        if IsFocused(data) then SubmitWeaponInfo(w) end
     end
 end
 
@@ -149,21 +189,15 @@ local function DrawInventoryWeapons()
             iconic = w.iconic and "\n" .. L("weaponsitems.iconic") or "",
             wall = w.onWall and "\n".. L("weaponsitems.wallmount") or ""
         }
-        Buttons.OptionExtended(w.name, "", "x" .. tostring(w.count), tip("weaponsitems.weaponentry.tip", tipData),
+        local _, data = Buttons.OptionExtended(w.name, "", "x" .. tostring(w.count), "Apply the selected inventory action.",
             function()
-                local action = actionOptions[actionMode.index or 1]
-                if action == "weaponsitems.addweapon" then
-                    Inventory.GiveItem(w.id, 1)
-                    w.count = w.count + 1
-                elseif action == "weaponsitems.removeweapon" then
-                    if w.count > 0 then
-                        Inventory.RemoveItem(w.id, 1)
-                        w.count = w.count - 1
-                    else
-                        Draw.Notifier.Push(L("weaponsitems.noinventoryweapons.label"))
-                    end
+                local amount = math.min(quantity.value, IsRemoving() and w.count or quantity.value)
+                if amount > 0 then
+                    ApplyWeapon(w, amount)
+                    w.count = math.max(0, w.count + (IsRemoving() and -amount or amount))
                 end
             end)
+        if IsFocused(data) then SubmitWeaponInfo(w) end
     end
 
     if #matchedWeapons == 0 then
@@ -187,10 +221,12 @@ local function DrawFilteredWeapons(mode)
             iconic = w.iconic and "\n" .. L("weaponsitems.iconic") or "",
             wall = w.onWall and "\n".. L("weaponsitems.wallmount") or ""
         }
-        Buttons.OptionExtended(w.displayName, "", "(" .. w.rarity .. ")", tip("weaponsitems.weaponentry.tip", tipData),
+        local summary = (IsRemoving() and "-" or "+") .. tostring(quantity.value)
+        local _, data = Buttons.OptionExtended(w.displayName, "", summary, "Apply the selected inventory action.",
         function()
-            Inventory.GiveItem(w.id, 1)
+            ApplyWeapon(w)
         end)
+        if IsFocused(data) then SubmitWeaponInfo(w) end
     end
 
     if #filtered == 0 then
@@ -206,10 +242,11 @@ local function WeaponInventoryView()
     end
 
     Buttons.Dropdown(L("weaponsitems.mode.label"), selectedMode, modeOptions, L("weaponsitems.mode.tip"))
+    Buttons.Dropdown(L("weaponsitems.actionmode.label"), actionMode, actionOptions, L("weaponsitems.actionmode.tip"))
+    Buttons.Int("Quantity", quantity, "Number of copies to add or remove per selection.")
 
     local mode = modeOptions[selectedMode.index or 1]
     if mode == "weaponsitems.onlyinventory.label" then
-        Buttons.Dropdown(L("weaponsitems.actionmode.label"), actionMode, actionOptions, L("weaponsitems.actionmode.tip"))
         Buttons.Option(L("weaponsitems.refreshinventory.label"), L("weaponsitems.refreshinventory.tip"),
             MatchInventoryToKnownWeapons)
         Buttons.Dropdown(L("weaponsitems.sortinventory.label"), selectedSort, sortModes,

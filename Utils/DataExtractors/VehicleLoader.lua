@@ -9,40 +9,41 @@ local VehicleLoader = {
 local function InferCategory(tags, id, displayName)
     local idLower = (id or ""):lower()
     local nameLower = (displayName or ""):lower()
-
-    if idLower:find("police") or idLower:find("border") or idLower:find("maxtac") then
-        return "Emergency/Police"
-    elseif idLower:find("basilisk") or idLower:find("coach") or idLower:find("missile") or idLower:find("bmf") then
-        return "Special"
-    end
-
-    if idLower:find("sport1") then
-        return "Hypercars"
-    elseif idLower:find("sport2") then
-        return "Sports Cars"
-    elseif idLower:find("standard3") then
-        return "Pickups & SUVs"
-    elseif idLower:find("standard25") then
-        return "Vans & Couriers"
-    elseif idLower:find("standard2") then
-        return "Compact"
-    end
-
-    if idLower:find("v_010_v_tek") or idLower:find("v_013_rayfield_aerodnight") then
-        return "Hypercars"
-    end
-
     local all = table.concat(tags or {}, " "):lower() .. " " .. idLower .. " " .. nameLower
 
-    if all:match("%f[%a]utility%d*%f[%A]") then
-        return "Utility"
-    elseif all:match("%f[%a]bike%f[%A]") then
-        return "Motorcycle"
-    elseif all:match("%f[%a]sport%f[%A]") then
-        return "Sport Vehicle"
+    if idLower:find("police") or idLower:find("border") or idLower:find("maxtac") then
+        return "Police & Emergency"
+    elseif all:find("motorcycle", 1, true) or all:find("sportbike", 1, true)
+        or all:find("motorbike", 1, true) or idLower:find("_bike") then
+        return "Motorcycles"
+    elseif idLower:find("basilisk") or idLower:find("coach") or idLower:find("missile")
+        or idLower:find("bmf") or idLower:find("panzer") then
+        return "Heavy & Special"
     end
 
-    return "Uncategorized"
+    if idLower:find("caliburn") or idLower:find("aerondight") or idLower:find("outlaw") then
+        return "Hypercars"
+    elseif idLower:find("standard25") or idLower:find("pickup") or idLower:find("columbus")
+        or idLower:find("utility") or idLower:find("truck") or idLower:find("van") then
+        return "Utility & Pickups"
+    elseif idLower:find("alvarado") or idLower:find("cortes") or idLower:find("deleon")
+        or idLower:find("delamain") or idLower:find("thrax") then
+        return "Executive"
+    elseif idLower:find("standard3") or idLower:find("mackinaw") or idLower:find("merrimac")
+        or idLower:find("emperor") or all:find("offroad", 1, true) or all:find("nomad", 1, true) then
+        return "SUV & Off-Road"
+    elseif idLower:find("sport1") or idLower:find("sport2") or all:match("%f[%a]sport%f[%A]") then
+        return "Sports"
+    elseif idLower:find("standard1") or idLower:find("standard2") or idLower:find("maimai")
+        or idLower:find("galena") or idLower:find("hella") or idLower:find("supron") then
+        return "Economy"
+    end
+
+    if all:match("%f[%a]utility%d*%f[%A]") then
+        return "Utility & Pickups"
+    end
+
+    return "Other"
 end
 
 
@@ -65,26 +66,27 @@ local function InferFaction(record, id)
 
     if not faction then
         local groups = {
-            tyger = "Tyger Claws",
-            maelstrom = "Maelstrom",
-            voodoo = "Voodoo Boys",
-            mox = "Moxes",
-            netwatch = "NetWatch",
-            animal = "Animals",
-            militech = "Militech",
-            nomad = "Nomads",
-            player = "Player",
-            ncpd = "Police",
-            max = "Maxtac",
-            arasaka = "Arasaka",
-            barghest = "Barghest",
-            sixth = "Sixth Street",
-            valentino = "Valentinos",
-            scavengers = "Scavs"
+            { "maxtac", "Maxtac" },
+            { "tyger", "Tyger Claws" },
+            { "maelstrom", "Maelstrom" },
+            { "voodoo", "Voodoo Boys" },
+            { "netwatch", "NetWatch" },
+            { "militech", "Militech" },
+            { "barghest", "Barghest" },
+            { "valentino", "Valentinos" },
+            { "scavenger", "Scavs" },
+            { "sixth", "Sixth Street" },
+            { "arasaka", "Arasaka" },
+            { "animal", "Animals" },
+            { "nomad", "Nomads" },
+            { "ncpd", "Police" },
+            { "mox", "Moxes" },
+            { "player", "Player" },
         }
-        for key, label in pairs(groups) do
-            if id:lower():find(key) then
-                faction = label
+        local idLower = id:lower()
+        for _, group in ipairs(groups) do
+            if idLower:find(group[1], 1, true) then
+                faction = group[2]
                 break
             end
         end
@@ -108,6 +110,14 @@ local function GetVehicleInfoLore(record)
 
         local year = utils.SafeCall(function() return ui:ProductionYear() end)
         if year then info.productionYear = tostring(year) end
+
+        info.horsepower = tonumber(utils.SafeCall(function() return ui:Horsepower() end))
+        info.mass = tonumber(utils.SafeCall(function() return ui:Mass() end))
+        local driveLayout = utils.SafeCall(function() return ui:DriveLayout() end)
+        if driveLayout then
+            local text = Game.GetLocalizedText(driveLayout)
+            if text and text ~= "Label Not Found" then info.driveLayout = utils.EscapeString(text) end
+        end
     end
 
     return info
@@ -156,7 +166,8 @@ function VehicleLoader:HandleTwinToneScan(this, wrappedMethod) -- Function taken
             local id = utils.SafeCall(function() return obj:GetRecord():GetID().value end)
                 or utils.SafeCall(function() return obj:GetRecord():GetRecordID().value end)
 
-            if id and not Game.GetVehicleSystem():IsVehiclePlayerUnlocked(TweakDBID.new(id)) then
+            local vehicleSystem = Game.GetVehicleSystem()
+            if id and vehicleSystem and not vehicleSystem:IsVehiclePlayerUnlocked(TweakDBID.new(id)) then
                 this.twintoneAvailable = true
                 return true
             end
@@ -203,11 +214,12 @@ function VehicleLoader:IsVirtualDealerVehicle(id)
     if not id then return false end
 
     local price = TweakDB:GetFlat(id .. ".dealerPrice")
-    if type(price) ~= "number" or price <= 0 then
-        return false
-    end
+    local variants = TweakDB:GetFlat(id .. ".dealerVariants")
+    local partName = TweakDB:GetFlat(id .. ".dealerPartName")
 
-    return true
+    return (type(price) == "number" and price > 0)
+        or (type(variants) == "table" and #variants > 0)
+        or (type(partName) == "string" and partName ~= "")
 end
 
 function VehicleLoader:LoadVariantRecords(variants)
@@ -216,11 +228,23 @@ function VehicleLoader:LoadVariantRecords(variants)
             local rec = TweakDB:GetRecord(varId)
             if rec then
                 local displayName = utils.GetDisplayName(rec)
+                local tags = utils.GetTags(rec)
+                local lore = GetVehicleInfoLore(rec)
                 local vdata = {
                     id = varId,
                     displayName = displayName,
+                    manufacturer = GetManufacturer(rec),
+                    category = InferCategory(tags, varId, displayName),
+                    faction = InferFaction(rec, varId),
+                    tags = tags,
+                    description = lore.description,
+                    productionYear = lore.productionYear,
+                    horsepower = lore.horsepower,
+                    mass = lore.mass,
+                    driveLayout = lore.driveLayout,
                     variants = {},
-                    isModded = true
+                    isModded = true,
+                    source = "Add-On"
                 }
 
                 table.insert(self.vehicles, vdata)
@@ -232,6 +256,8 @@ end
 
 
 function VehicleLoader:LoadAll()
+    self.vehicles = {}
+    self.indexById = {}
     local records = TweakDB:GetRecords("gamedataVehicle_Record")
     if not records or #records == 0 then
         Logger.Log("VehicleLoader: No vehicle records found.")
@@ -243,22 +269,30 @@ function VehicleLoader:LoadAll()
     for _, rec in ipairs(records) do
         local id = utils.SafeCall(function() return rec:GetID().value end)
         if not id then goto continue end
+        if self.indexById[id] then goto continue end
 
         local idLower = id:lower()
 
         local isVanilla = id:match("^Vehicle%.v_") or id:match("^Vehicle%.vcd")
-        local isModded = self:IsVirtualDealerVehicle(id)
-
-        if not isVanilla and not isModded then goto continue end
+        local isDealerVehicle = self:IsVirtualDealerVehicle(id)
+        local entityPath = utils.SafeCall(function() return rec:EntityTemplatePath() end)
+        local hasEntity = entityPath ~= nil and tostring(entityPath) ~= ""
+        if not isVanilla and not isDealerVehicle and not hasEntity then goto continue end
+        local isModded = not isVanilla
 
         local manufacturer = GetManufacturer(rec)
         local displayName = utils.GetDisplayName(rec)
         local tags = utils.GetTags(rec)
         local lore = GetVehicleInfoLore(rec)
+        
+        if idLower:find("_av_") or idLower:match("^vehicle%.av_") or idLower:match("_av$") then goto continue end
 
-        if manufacturer == "Unlisted" or displayName == "Unknown" then goto continue end
-        if idLower:find("_av_") or idLower:match("^av_") or idLower:match("_av$") then goto continue end
-        if lore.productionYear and tostring(lore.productionYear):lower():find("lockey") then goto continue end
+        if not isModded then -- Seems some modded vehicles were missed due to having "Unlisted" manufacturer or "Unknown" display name, so we'll just skip those checks for modded vehicles
+            if manufacturer == "Unlisted" or displayName == "Unknown" then goto continue end
+            if lore.productionYear and tostring(lore.productionYear):lower():find("lockey") then goto continue end
+        elseif displayName == "Unknown" and not isDealerVehicle then
+            goto continue
+        end
 
         local category = InferCategory(tags, id, displayName)
 
@@ -266,7 +300,6 @@ function VehicleLoader:LoadAll()
         if isModded then
             table.insert(tags, "Modded Vehicle")
             table.insert(tags, "Add-On Vehicle")
-            category = "Add-On Vehicles(Modded)"
             variants = self:GetVirtualDealerVariants(id)
         end
 
@@ -280,8 +313,12 @@ function VehicleLoader:LoadAll()
             tags = tags,
             description = lore.description,
             productionYear = lore.productionYear,
+            horsepower = lore.horsepower,
+            mass = lore.mass,
+            driveLayout = lore.driveLayout,
             variants = variants,
-            isModded = isModded
+            isModded = isModded,
+            source = isModded and "Add-On" or "Base Game"
         }
 
         if isModded and #variants > 0 then
@@ -306,6 +343,17 @@ end
 
 function VehicleLoader:GetAll()
     return self.vehicles
+end
+
+function VehicleLoader:GetBrowsable()
+    local variantIds, result = {}, {}
+    for _, vehicle in ipairs(self.vehicles) do
+        for _, variantId in ipairs(vehicle.variants or {}) do variantIds[variantId] = true end
+    end
+    for _, vehicle in ipairs(self.vehicles) do
+        if not variantIds[vehicle.id] then table.insert(result, vehicle) end
+    end
+    return result
 end
 
 function VehicleLoader:GetById(id)

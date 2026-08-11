@@ -135,7 +135,7 @@ local function FilteredCategoryView()
     end
 end
 
-local filteredCategorySubmenu = { title = L("teleport.selectedteleports.label"), view = FilteredCategoryView }
+local filteredCategorySubmenu = { title = "teleport.selectedteleports.label", view = FilteredCategoryView }
 
 local function GetFilteredCategories()
     local seen, filtered = {}, {}
@@ -259,7 +259,7 @@ local function TeleportSettingsView()
 
     Buttons.Toggle(L("teleport.autowaypoint.label"), AutoTeleport.toggleAutoWaypoint, L("teleport.autowaypoint.tip"))
     Buttons.Toggle(L("teleport.autoquest.label"), AutoTeleport.toggleAutoQuest, L("teleport.autoquest.tip"))
-    Buttons.Break("", L("teleport.Settings.label"))
+    Buttons.Break("", L("teleport.settings.label"))
     Buttons.Toggle(L("teleport.showforward.label"), Settings.showForward, L("teleport.showforward.tip"))
     Buttons.Toggle(L("teleport.showquick.label"), Settings.showQuick, L("teleport.showquick.tip"))
     Buttons.Toggle(L("teleport.showquickdistance.label"), Settings.showQuickDistance, L("teleport.showquickdistance.tip"))
@@ -270,7 +270,7 @@ local function TeleportSettingsView()
     Buttons.Toggle(L("teleport.showcreatorfilter.label"), Settings.showCreatorFilter, L("teleport.showcreatorfilter.tip"))
 end
 
-local settingsSubmenu = { title = L("teleport.settingssubmenu.label"), view = TeleportSettingsView }
+local settingsSubmenu = { title = "teleport.settingssubmenu.label", view = TeleportSettingsView }
 
 function TeleportMenuView()
     if not onInit then

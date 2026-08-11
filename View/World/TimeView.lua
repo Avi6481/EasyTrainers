@@ -46,6 +46,7 @@ local function WorldTimeViewFunction()
     local time12 = FormatTime12(time.hours, time.minutes, time.seconds)
     Buttons.OptionExtended(L("worldtime.currenttime12.label"), "", time12, L("worldtime.currenttime12.tip"))
 
+    Buttons.Break("", "Set Custom Time")
     Buttons.Int(
         L("worldtime.hour.label"),
         WorldTime.customHour,
@@ -55,8 +56,6 @@ local function WorldTimeViewFunction()
     Buttons.Int(L("worldtime.minute.label"), WorldTime.customMinute, L("worldtime.minute.tip"), OnCustomTimeChanged)
     Buttons.Int(L("worldtime.second.label"), WorldTime.customSecond, L("worldtime.second.tip"), OnCustomTimeChanged)
     WorldTime.customTimeEdited = false
-    
-    Buttons.Toggle(L("worldtime.synctopc.label"), WorldTime.toggleSyncToSystemClock, L("worldtime.synctopc.tip"))
     
     Buttons.Break(L("worldtime.quickset.label"))
     Buttons.Option(L("worldtime.setmorning.label"), L("worldtime.setmorning.tip"), WorldTime.SetTimeMorning)
@@ -73,12 +72,34 @@ local function WorldTimeViewFunction()
     end)
 
     Buttons.Break(L("worldtime.freezefast.label"))
-    Buttons.Toggle(L("worldtime.freezetime.label"), WorldTime.toggleFreezeTime, L("worldtime.freezetime.tip"))
+    Buttons.Toggle(L("worldtime.freezetime.label"), WorldTime.toggleFreezeTime, L("worldtime.freezetime.tip"), function(enabled)
+        if enabled then
+            WorldTime.toggleSyncToSystemClock.value = false
+            WorldTime.toggleTimeLapse.value = false
+            WorldTime.daySpeedMultiplier.enabled = false
+            WorldTime.nightSpeedMultiplier.enabled = false
+        end
+    end)
+    Buttons.Toggle(L("worldtime.synctopc.label"), WorldTime.toggleSyncToSystemClock, L("worldtime.synctopc.tip"), function(enabled)
+        if enabled then
+            WorldTime.toggleFreezeTime.value = false
+            WorldTime.toggleTimeLapse.value = false
+            WorldTime.daySpeedMultiplier.enabled = false
+            WorldTime.nightSpeedMultiplier.enabled = false
+        end
+    end)
     Buttons.Float(L("worldtime.fasterdayspeed.label"), WorldTime.daySpeedMultiplier, L("worldtime.fasterdayspeed.tip"))
     Buttons.Float(L("worldtime.fasternightspeed.label"), WorldTime.nightSpeedMultiplier, L("worldtime.fasternightspeed.tip"))
 
     Buttons.Break(L("worldtime.timelapse.label"))
-    Buttons.Toggle(L("worldtime.enabletimelapse.label"), WorldTime.toggleTimeLapse, L("worldtime.enabletimelapse.tip"))
+    Buttons.Toggle(L("worldtime.enabletimelapse.label"), WorldTime.toggleTimeLapse, L("worldtime.enabletimelapse.tip"), function(enabled)
+        if enabled then
+            WorldTime.toggleFreezeTime.value = false
+            WorldTime.toggleSyncToSystemClock.value = false
+            WorldTime.daySpeedMultiplier.enabled = false
+            WorldTime.nightSpeedMultiplier.enabled = false
+        end
+    end)
     Buttons.Int(L("worldtime.timelapsemultiplier.label"), WorldTime.timeLapseMultiplier, L("worldtime.timelapsemultiplier.tip"))
 end
 

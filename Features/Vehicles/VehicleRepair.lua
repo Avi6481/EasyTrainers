@@ -28,8 +28,9 @@ function VehicleRepairs.RepairMounted()
 
     vc.damageLevel = 0
 
-    local type = veh:GetVehicleType().value
-    if type ~= "Bike" then
+    local vehicleType = veh:GetVehicleType()
+    local typeName = vehicleType and vehicleType.value or ""
+    if typeName ~= "Bike" then
         vc.bumperFrontState = 0
         vc.bumperBackState  = 0
 

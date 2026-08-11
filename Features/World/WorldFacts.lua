@@ -5,7 +5,6 @@ local logger = require("Core/Logger")
 function Facts.Get(factName)
     local QS = Game.GetQuestsSystem()
     local result = QS:GetFactStr(factName)
-    logger.Log(string.format("[Facts] %s = %s", factName, tostring(result)))
     return result
 end
 

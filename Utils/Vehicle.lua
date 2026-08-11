@@ -22,7 +22,9 @@ function Vehicle.UnmountPlayer(force)
         Logger.Log("Vehicle: no vehicle to unmount")
         return false
     end
-    Game.GetWorkspotSystem():UnmountFromVehicle(vehicle, player, force or false)
+    local workspot = Game.GetWorkspotSystem()
+    if not workspot then return false end
+    workspot:UnmountFromVehicle(vehicle, player, force or false)
     return true
 end
 
@@ -33,7 +35,9 @@ function Vehicle.MountPlayer(vehicle, seat)
         return false
     end
     local comp = vehicle:GetVehicleComponent()
-    comp:MountEntityToSlot(vehicle:GetEntityID(), Game.GetPlayer():GetEntityID(), CName.new(seat or "seat_front_left"))
+    local player = Game.GetPlayer()
+    if not (comp and player) then return false end
+    comp:MountEntityToSlot(vehicle:GetEntityID(), player:GetEntityID(), CName.new(seat or "seat_front_left"))
     return true
 end
 

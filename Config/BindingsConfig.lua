@@ -3,10 +3,10 @@ local Bindings = require("Controls/Bindings")
 local Logger = require("Core/Logger")
 
 local BindingsConfig = {}
-local filePath = "config/JSON/bindings.json"
+local filePath = "Config/JSON/Bindings.json"
 
 function BindingsConfig.Load()
-    local data, err = JsonHelper.Read(filePath)
+    local data, _, err = JsonHelper.LoadOrCreate(filePath, Bindings.Actions)
     if type(data) ~= "table" then
         Logger.Log("BindingsConfig: Failed to load bindings (" .. tostring(err) .. ")")
         return false

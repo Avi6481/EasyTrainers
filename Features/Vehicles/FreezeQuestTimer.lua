@@ -9,12 +9,15 @@ function FreezeQuestTimer.HandleCountdownTimer(_, _)
     if not FreezeQuestTimer.toggleFreezeQuestTimer.value then return end
 
     local timerDef = GetAllBlackboardDefs().UI_HUDCountdownTimer
-    local timerBB = Game.GetBlackboardSystem():Get(timerDef)
+    local blackboardSystem = Game.GetBlackboardSystem()
+    local delaySystem = Game.GetDelaySystem()
+    if not (timerDef and blackboardSystem and delaySystem) then return end
+    local timerBB = blackboardSystem:Get(timerDef)
     if not timerBB then return end
 
     local missionTimer = FromVariant(timerBB:GetVariant(timerDef.TimerID))
     if missionTimer then
-        Game.GetDelaySystem():CancelTick(missionTimer)
+        delaySystem:CancelTick(missionTimer)
         timerBB:SetFloat(timerDef.Progress, 599.0, true)
     end
 end

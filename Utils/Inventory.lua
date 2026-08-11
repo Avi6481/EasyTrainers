@@ -62,7 +62,6 @@ function Inventory.RemoveItem(tweakID, quantity)
     return removed
 end
 
--- Get all items (returns table of {id, name, quantity, raw})
 function Inventory.GetAllItems()
     local player = Game.GetPlayer()
     local ts = Game.GetTransactionSystem()
@@ -80,7 +79,7 @@ function Inventory.GetAllItems()
         table.insert(result, {
             id = tdbid,
             name = name,
-            quantity = item.quantity or 1,
+            quantity = ts:GetItemQuantity(player, itemID) or 1,
             raw = item
         })
     end

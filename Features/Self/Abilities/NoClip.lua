@@ -2,16 +2,16 @@ local Input = require("Core/Input")
 local Utils = require("Utils")
 local StatusEffect = Utils.StatusEffect
 local Teleport = Utils.Teleport
-local logger = require("Core/Logger")
+local Bindings = require("Controls/Bindings")
 local Noclip = {}
 Noclip.toggleNoClip = { value = false }
+Noclip.moveSpeed = { value = 1.5, min = 0.25, max = 10.0, step = 0.25 }
+Noclip.verticalSpeed = { value = 1.0, min = 0.25, max = 5.0, step = 0.25 }
+Noclip.boostMultiplier = { value = 2.5, min = 1.0, max = 8.0, step = 0.25 }
+Noclip.precisionMultiplier = { value = 0.7, min = 0.1, max = 1.0, step = 0.05 }
+Noclip.gamepadDeadzone = { value = 7849, min = 0, max = 16000, step = 250 }
 
 local yaw = 0
-local moveSpeed = 1.5
-local boostMult = 2.5
-local slowMult = 0.7
-local deadzone = 7849
-
 local noclipRestrictions = {
     "GameplayRestriction.NoZooming",
     "GameplayRestriction.NoMovement",
@@ -66,6 +66,7 @@ function Noclip.Tick()
     local ly = -Input.GetGamepadAxis(Input.GP_AXIS.LEFT_Y)
     local rx = Input.GetGamepadAxis(Input.GP_AXIS.RIGHT_X)
 
+    local deadzone = Noclip.gamepadDeadzone.value
     if math.abs(lx) < deadzone then lx = 0 end
     if math.abs(ly) < deadzone then ly = 0 end
 
@@ -75,21 +76,23 @@ function Noclip.Tick()
     end
 
     -- button inputs
-    local goUp = Input.IsKeyDown(Input.VK.SPACE) or Input.IsButtonDown(Input.GP.RIGHT_BUMPER)
-    local goDown = Input.IsKeyDown(Input.VK.CTRL)  or Input.IsButtonDown(Input.GP.LEFT_BUMPER)
-    local speedBoost = Input.IsKeyDown(Input.VK.SHIFT) or Input.IsButtonDown(Input.GP.LEFT_STICK)
+    local goUp = Bindings.IsActionDown("NOCLIP_UP")
+    local goDown = Bindings.IsActionDown("NOCLIP_DOWN")
+    local speedBoost = Bindings.IsActionDown("NOCLIP_BOOST")
 
-    local forward = Input.IsKeyDown(Input.VK.W) or ly < 0
-    local backward = Input.IsKeyDown(Input.VK.S) or ly > 0
-    local strafeL = Input.IsKeyDown(Input.VK.A) or lx < 0
-    local strafeR = Input.IsKeyDown(Input.VK.D) or lx > 0
+    local forward = Bindings.IsActionDown("NOCLIP_FORWARD") or ly < 0
+    local backward = Bindings.IsActionDown("NOCLIP_BACKWARD") or ly > 0
+    local strafeL = Bindings.IsActionDown("NOCLIP_LEFT") or lx < 0
+    local strafeR = Bindings.IsActionDown("NOCLIP_RIGHT") or lx > 0
 
-    local frameSpeed = moveSpeed * (speedBoost and boostMult or slowMult)
+    local frameSpeed = Noclip.moveSpeed.value
+        * (speedBoost and Noclip.boostMultiplier.value or Noclip.precisionMultiplier.value)
+    local verticalSpeed = Noclip.verticalSpeed.value
+        * (speedBoost and Noclip.boostMultiplier.value or Noclip.precisionMultiplier.value)
 
     local pos = player:GetWorldPosition()
     if forward then
         local fwd = Teleport.GetForwardOffset(frameSpeed, yaw)
-        logger.Log("fwd: " .. tostring(fwd))
         pos.x, pos.y = fwd.x, fwd.y
     end
     if backward then
@@ -105,8 +108,8 @@ function Noclip.Tick()
         pos.x, pos.y = left.x, left.y
     end
 
-    if goUp then pos.z = pos.z + frameSpeed end
-    if goDown then pos.z = pos.z - frameSpeed end
+    if goUp then pos.z = pos.z + verticalSpeed end
+    if goDown then pos.z = pos.z - verticalSpeed end
 
     if yaw < 0 then yaw = yaw + 360 end
     if yaw > 360 then yaw = yaw - 360 end

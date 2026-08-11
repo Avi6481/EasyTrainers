@@ -3,6 +3,7 @@ local Weapon = {
     isAiming = false,
     isShooting = false,
     lastWeaponID = nil,
+    lastItemKey = nil,
     hasChanged = false,
     lastCheckTime = 0,
     checkInterval = 1
@@ -95,21 +96,30 @@ function Weapon.IsShootingRanged()
 end
 
 function Weapon.Tick(deltaTime)
-    local _, _, itemID = Weapon.GetEquippedRightHand()
-    if not itemID then return end
+    local _, itemData, itemID = Weapon.GetEquippedRightHand()
+    if not itemID then
+        if Weapon.lastItemKey ~= nil then
+            Weapon.lastItemKey = nil
+            Weapon.lastWeaponID = nil
+            Weapon.hasChanged = true
+        end
+        return
+    end
 
-    if itemID ~= Weapon.lastWeaponID then
+    local itemKey = tostring(itemID)
+    if itemKey ~= Weapon.lastItemKey then
         Weapon.hasChanged = true
-        Weapon.lastWeaponID = itemID
+        Weapon.lastItemKey = itemKey
+        Weapon.lastWeaponID = itemData and itemData:GetStatsObjectID() or nil
     end
 end
 
 function Weapon.HasChanged()
-    if Weapon.hasChanged then
-        Weapon.hasChanged = false
-        return true
-    end
-    return false
+    return Weapon.hasChanged
+end
+
+function Weapon.EndFrame()
+    Weapon.hasChanged = false
 end
 
 

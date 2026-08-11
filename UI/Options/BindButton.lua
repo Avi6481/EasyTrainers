@@ -1,8 +1,8 @@
-local Option = require("UI/Options/Option")
+local Button = require("UI/Widgets/Button/Button")
 local Input = require("Core/Input")
 local Bindings = require("Controls/Bindings")
 local BindingsConfig = require("Config/BindingsConfig")
-local Notification = require("UI/Elements/Notification")
+local Notification = require("UI/Panels/Notification/Notification")
 local Language = require("Core/Language")
 local State = require("Controls/State")
 
@@ -57,7 +57,7 @@ function BindButton.Option(label, action, tip)
         end
     end
 
-    local clicked,pos = Option.Option(label,"",display,tip)
+    local clicked,pos = Button.Draw(label, tip, display, label .. "##binding##" .. action)
     if not pos then return false end
 
     if clicked then

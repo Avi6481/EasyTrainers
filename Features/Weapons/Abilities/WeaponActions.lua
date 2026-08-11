@@ -13,14 +13,14 @@ function WeaponActions.GiveAllWallWeapons()
 end
 
 function WeaponActions.RemoveAllWeapons(rarity)
-    local inventoryItems = Inventory:GetAllItems()
+    local inventoryItems = Inventory.GetAllItems()
     for _, item in ipairs(inventoryItems) do
         if item and item.id and tostring(item.id):find("^Items%.") then
             local weaponData = WeaponLoader:GetById(item.id)
             if weaponData then
                 local isMatch = not rarity or (weaponData.rarity and weaponData.rarity:lower() == rarity:lower())
                 if isMatch then
-                    Inventory.RemoveItem(item.id, item.count or 1)
+                    Inventory.RemoveItem(item.id, item.quantity or item.count or 1)
                 end
             end
         end

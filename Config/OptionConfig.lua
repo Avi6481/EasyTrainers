@@ -1,68 +1,98 @@
 local JsonHelper = require("Core/JsonHelper")
 local Logger = require("Core/Logger")
+local Registry = require("UI/Registry/OptionRegistry")
 
-local OptionRegistration = {
-    filePath = "config/JSON/options.json",
-    registry = {},
-    _cachedData = nil
+local OptionConfig = {
+    FilePath = "Config/JSON/Options.json",
+    Registry = Registry,
 }
 
-function OptionRegistration.Register(key, ref, default)
-    if not ref or type(ref) ~= "table" or ref.value == nil then
-        Logger.Log("OptionRegistration: Tried to register invalid ref: " .. tostring(key))
-        return
-    end
-
-    if OptionRegistration.registry[key] then return end
-
-    OptionRegistration.registry[key] = { ref = ref, default = default }
-
-    if OptionRegistration._cachedData and OptionRegistration._cachedData[key] ~= nil then
-        ref.value = OptionRegistration._cachedData[key]
-    elseif ref.value == nil and default ~= nil then
-        ref.value = default
-    end
+local function InferCategory(id)
+    return id:match("^[^.]+%.([^.]+)") or "general"
 end
 
-function OptionRegistration.Load()
-    local data, err = JsonHelper.Read(OptionRegistration.filePath)
-    if not data then
-        Logger.Log("OptionRegistration: No file loaded: " .. tostring(err))
-        return
+local function ValuesMatch(left, right)
+    if type(left) ~= type(right) then return false end
+    if type(left) ~= "table" then return left == right end
+    for key, value in pairs(left) do
+        if not ValuesMatch(value, right[key]) then return false end
     end
-
-    OptionRegistration._cachedData = data
-
-    for key, entry in pairs(OptionRegistration.registry) do
-        local fileVal = data[key]
-        if fileVal ~= nil then
-            entry.ref.value = fileVal
-        elseif entry.default ~= nil then
-            entry.ref.value = entry.default
-        end
+    for key, value in pairs(right) do
+        if not ValuesMatch(value, left[key]) then return false end
     end
+    return true
 end
 
-function OptionRegistration.Save()
-    local existing, _ = JsonHelper.Read(OptionRegistration.filePath)
+---Register a structured option definition.
+---The legacy (id, ref, default) signature remains supported during migration.
+function OptionConfig.Register(specOrId, ref, default)
+    if type(specOrId) == "table" then return Registry.Register(specOrId) end
+    return Registry.Register({
+        Id = specOrId,
+        Kind = Registry.Kind.Toggle,
+        Ref = ref,
+        Default = default,
+        Category = InferCategory(specOrId or ""),
+    })
+end
+
+function OptionConfig.RegisterAll(specs)
+    return Registry.RegisterAll(specs)
+end
+
+OptionConfig.DefineToggle = Registry.DefineToggle
+OptionConfig.DefineButton = Registry.DefineButton
+OptionConfig.DefineDropdown = Registry.DefineDropdown
+OptionConfig.DefineSubmenu = Registry.DefineSubmenu
+
+function OptionConfig.Load()
+    local values, _, err = JsonHelper.LoadOrCreate(OptionConfig.FilePath, {})
+    if type(values) ~= "table" then
+        Logger.Log("OptionConfig: Failed to load options (" .. tostring(err) .. ")")
+        return false
+    end
+
+    Registry.LoadValues(values)
+    return true
+end
+
+function OptionConfig.Save()
+    local existing, _, status = JsonHelper.ReadOptional(OptionConfig.FilePath)
+    if status and status ~= "missing" then return false end
     if type(existing) ~= "table" then existing = {} end
 
-    local changed = false
-    for key, entry in pairs(OptionRegistration.registry) do
-        local oldVal = existing[key]
-        local newVal = entry.ref.value
-        if oldVal ~= newVal then
-            existing[key] = newVal
-            changed = true
-        end
+    local values = Registry.ExportValues(existing)
+    if ValuesMatch(existing, values) then
+        Registry.ClearDirty()
+        return true
     end
 
-    if changed then
-        local ok, err = JsonHelper.Write(OptionRegistration.filePath, existing)
-        if not ok then
-            Logger.Log("OptionRegistration: Failed to save: " .. tostring(err))
-        end
+    local ok, err = JsonHelper.Write(OptionConfig.FilePath, values)
+    if not ok then
+        Logger.Log("OptionConfig: Failed to save options (" .. tostring(err) .. ")")
+        return false
     end
+
+    Registry.ClearDirty()
+    return true
 end
 
-return OptionRegistration
+function OptionConfig.Get(id)
+    return Registry.Get(id)
+end
+
+function OptionConfig.Search(query, options)
+    return Registry.Search(query, options)
+end
+
+function OptionConfig.Activate(id)
+    local activated = Registry.Activate(id)
+    if activated then OptionConfig.Save() end
+    return activated
+end
+
+function OptionConfig.SetHotkey(id, hotkey)
+    return Registry.SetHotkey(id, hotkey)
+end
+
+return OptionConfig

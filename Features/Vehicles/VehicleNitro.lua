@@ -19,7 +19,9 @@ local VehicleNitro = {
 
 function VehicleNitro.Tick(dt)
     if VehicleNitro.multiplier.enabled then
-        local vehicle = Game.GetPlayer():GetMountedVehicle()
+        local player = Game.GetPlayer()
+        if not player then return end
+        local vehicle = player:GetMountedVehicle()
         if not vehicle then return end
         if Input.IsKeyDown(Input.VK.SHIFT) or Input.IsButtonDown(Input.GP.X) then
             vehicle:ToggleHorn(false, false)

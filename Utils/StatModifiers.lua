@@ -97,7 +97,8 @@ function StatModifiers.CreateForWeapon(statType, modifierType, value, weaponItem
         target = weaponItemID,
         statType = statType,
         modifierType = modifierType,
-        value = value
+        value = value,
+        active = true,
     }
 
     Logger.Log(string.format(
@@ -140,11 +141,13 @@ end
 
 
 function StatModifiers.RemoveAllButKeepCache()
+    local stats = Game.GetStatsSystem()
+    if not stats then return end
     local count = 0
-    for id, entry in pairs(cache) do
+    for _, entry in pairs(cache) do
         local targetID = getTargetID(entry)
         if targetID then
-            applyToTarget(entry.mod, targetID, true)
+            stats:RemoveModifier(targetID, entry.mod)
             count = count + 1
         end
     end

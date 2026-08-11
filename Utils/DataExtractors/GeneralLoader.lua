@@ -1,6 +1,5 @@
 local Logger = require("Core/Logger")
 local utils = require("Utils/DataExtractors/DataUtils")
-local JsonHelper = require("Core/JsonHelper")
 
 local GeneralLoader = {
     items = {},
@@ -107,6 +106,19 @@ local PARENT_CATEGORIES = { -- All of this so it's much easier to navigate; Load
     },
 }
 
+local PARENT_ORDER = {
+    "Quest",
+    "Consumables",
+    "CraftingMaterials",
+    "WeaponMods",
+    "SkillShards",
+    "CyberdeckShards",
+    "Reward",
+    "Readables",
+    "Miscellaneous",
+    "Cyberware",
+}
+
 -- Small helper
 local function tableContains(tbl, val)
     for _, v in ipairs(tbl) do
@@ -116,6 +128,8 @@ local function tableContains(tbl, val)
 end
 
 function GeneralLoader:LoadAll()
+    self.items = {}
+    self.indexById = {}
     local records = utils.TableMerge(
         TweakDB:GetRecords("gamedataItem_Record"),
         TweakDB:GetRecords("gamedataConsumableItem_Record")
@@ -144,6 +158,7 @@ function GeneralLoader:LoadAll()
     for _, rec in ipairs(records) do
         local id   = utils.SafeCall(function() return rec:GetID().value end)
         if not (id and id:find("^Items%.")) then goto continue end
+        if self.indexById[id] then goto continue end
         if id:find("<.+>") then goto continue end -- skip default/broken IDs
         for _, excl in ipairs(idExcludeList) do
             if id:find(excl) then goto continue end
@@ -185,7 +200,8 @@ function GeneralLoader:LoadAll()
 
 
     local catCount, subcatCount = 0, 0
-    for parent, subcats in pairs(PARENT_CATEGORIES) do
+    for _, parent in ipairs(PARENT_ORDER) do
+        local subcats = PARENT_CATEGORIES[parent]
         catCount = catCount + 1
         subcatCount = subcatCount + #subcats
     end
@@ -194,6 +210,14 @@ function GeneralLoader:LoadAll()
         "GeneralLoader: Loaded %d items across %d categories and %d subcategories.",
         #self.items, catCount, subcatCount
     ))
+end
+
+function GeneralLoader:GetAll()
+    return self.items
+end
+
+function GeneralLoader:GetById(id)
+    return self.indexById[id]
 end
 
 
@@ -207,7 +231,8 @@ local function shallowCopy(tbl)
 end
 
 local function AssignToCategory(item, categorized)
-    for parent, subcats in pairs(PARENT_CATEGORIES) do
+    for _, parent in ipairs(PARENT_ORDER) do
+        local subcats = PARENT_CATEGORIES[parent]
         local primarySub, additional = nil, {}
 
         for _, sub in ipairs(subcats) do
@@ -273,7 +298,8 @@ function GeneralLoader:Categorize()
     local categorized = {}
 
     -- init buckets
-    for parent, subcats in pairs(PARENT_CATEGORIES) do
+    for _, parent in ipairs(PARENT_ORDER) do
+        local subcats = PARENT_CATEGORIES[parent]
         categorized[parent] = {}
         for _, sub in ipairs(subcats) do
             categorized[parent][sub] = {}

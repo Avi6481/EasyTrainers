@@ -347,7 +347,7 @@ local function PlayerDevView()
 
     Buttons.Break(L("playerdev.perkattributes"))
     Buttons.Dropdown(L("playerdev.attributes.label"), selectedAttribute, attributeOptions,
-        tip("Select attribute to manage"))
+        tip("playerdev.attributes.tip"))
     Buttons.Int(L("playerdev.attributes.setlevel.label"), attributeLevel, tip("playerdev.attributes.setlevel.tip"),
         function()
             local stat = statTypeMap[attributeIdMap[attributeOptions[selectedAttribute.index]]]

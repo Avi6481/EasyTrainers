@@ -3,7 +3,7 @@ local Inventory = require("Utils").Inventory
 
 local CraftingComponents = require("Features/Items/ItemsCraftingComponents")
 local Consumables = require("Features/Items/ItemsConsumables")
-local ItemBuffs = require("Features/Items/ItemsBuffs")
+local ItemBuffs = require("Features/Items/ItemBuffs")
 
 local ItemActions = {}
 

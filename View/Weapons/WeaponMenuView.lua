@@ -45,13 +45,13 @@ local function AmmoItemsView()
         end)
     end
 end
-local ammoItemsSubmenu = { title = L("weaponsmenu.ammoitems.title"), view = AmmoItemsView }
+local ammoItemsSubmenu = { title = "weaponsmenu.ammoitems.title", view = AmmoItemsView }
 
 local function WeaponsViewFunction()
     Buttons.Submenu(L("weaponsmenu.weaponitems.label"), WeaponItemsMenu, tip("weaponsmenu.weaponitems.tip"))
     Buttons.Submenu(L("weaponsmenu.ammomanager.label"), ammoItemsSubmenu, tip("weaponsmenu.ammomanager.tip"))
 
-    
+    Buttons.Break("", "Core Weapon Controls")
     Buttons.Toggle(L("weaponsmenu.explosivebullets.label"), Weapons.ExplosiveBullets.enabled, tip("weaponsmenu.explosivebullets.tip"))
     Buttons.Toggle(L("weaponsmenu.infiniteammo.label"), Weapons.InfiniteAmmo.enabled, tip("weaponsmenu.infiniteammo.tip"))
     Buttons.Toggle(L("weaponsmenu.norecoil.label"), Weapons.StatModifiers.NoRecoil.toggleNoRecoil, tip("weaponsmenu.norecoil.tip"))
@@ -98,6 +98,6 @@ local function WeaponsViewFunction()
 end
 
 
-local WeaponsView = { title = L("weaponsmenu.title"), view = WeaponsViewFunction }
+local WeaponsView = { title = "weaponsmenu.title", view = WeaponsViewFunction }
 
 return WeaponsView

@@ -7,13 +7,6 @@ local lastTeleportTime = -1
 
 TeleportShot.enabled = { value = false }
 
-
-local TeleportShot = {}
-local cooldown = 0.5
-local lastTeleportTime = -1
-
-TeleportShot.enabled = { value = false }
-
 -- Same as the FlyingThunderGod but since I don't know how to track hitscans in the game,
 -- this checks where the player's looking and then waits for them to shoot
 function TeleportShot.Tick()

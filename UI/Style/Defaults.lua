@@ -1,0 +1,40 @@
+local Defaults = {
+    Layout = {
+        X = 100,
+        Y = 100,
+        DefaultWidth = 420,
+        DefaultHeight = 600,
+        MinimumWidth = 300,
+        MinimumHeight = 360,
+        Width = 420,
+        Height = 600,
+        HeaderHeight = 48,
+        SubmenuBarHeight = 28,
+        OptionHeight = 32,
+        FooterHeight = 28,
+        Padding = 12,
+        Spacing = 3,
+        BorderSize = 1,
+        Rounding = 8,
+    },
+    Colors = {
+        Background = 0xF51A1A1A,
+        BackgroundLight = 0xF5222222,
+        BackgroundDark = 0xFA101010,
+        Transparent = 0x00000000,
+        Accent = 0xFFA56E3A,
+        AccentHover = 0xFFBE844C,
+        AccentActive = 0xFF9314FF,
+        Text = 0xFFFFFFFF,
+        TextDisabled = 0xFFA08C78,
+        Border = 0xFF6E5A50,
+        Shadow = 0x60000000,
+    },
+    Animation = {
+        Fast = 18,
+        Normal = 12,
+        Slow = 8,
+    },
+}
+
+return Defaults

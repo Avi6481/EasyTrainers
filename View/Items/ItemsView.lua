@@ -1,153 +1,122 @@
--- View/Items/ItemsView.lua
-local UI        = require("UI")
-local Buttons   = UI.Buttons
-local Inventory = require("Utils").Inventory
-local Items     = require("Features/Items/")
+local UI = require("UI")
+local Buttons = UI.Buttons
+local SidePanel = UI.SidePanel
+local Notification = UI.Notification
+local Items = require("Features/Items")
 
-local CraftingComponents = Items.CraftingComponents
-local Consumables        = Items.Consumables
-local ItemBuffs          = Items.Buffs
-local ItemActions        = Items.Actions
-local ItemModRecipes     = Items.ModRecipes
-local ItemQuickhackRecipes = Items.QuickhackRecipes
-local ItemWeaponRecipes  = Items.WeaponRecipes
-local ItemClothingRecipes= Items.ClothingRecipes
-local ItemGrenadeRecipes = Items.GrenadeRecipes
+local State = Items.BrowserState
 
-local refs = {
-    allCrafting   = { value = 1, min = 1, max = 999, step = 1 },
-    itemComp      = { value = 1, min = 1, max = 999, step = 1 },
-    quickhackComp = { value = 1, min = 1, max = 999, step = 1 },
-    upgradeComp   = { value = 1, min = 1, max = 999, step = 1 },
-    allConsum     = { value = 1, min = 1, max = 999, step = 1 },
-    bounceBacks   = { value = 1, min = 1, max = 999, step = 1 },
-    maxDocs       = { value = 1, min = 1, max = 999, step = 1 },
-    boosters      = { value = 1, min = 1, max = 999, step = 1 },
-    allBuffs      = { value = 1, min = 1, max = 999, step = 1 },
+local function IsFocused(data)
+    return data and data.Visible and (data.Selected or data.Hovered)
+end
+
+local function DrawItemControls()
+    Buttons.Dropdown("Inventory Action", State.Action, State.Actions,
+        "Choose whether selecting an item adds it to or removes it from your inventory.")
+    Buttons.Int("Quantity", State.Quantity, "Amount applied each time you select an item.")
+end
+
+local function SubmitItemInfo(item, section)
+    SidePanel.SubmitInfo("essential-item", {
+        Eyebrow = "ESSENTIAL ITEM",
+        Title = item.name,
+        Rows = {
+            { Label = "Section", Value = section },
+            { Label = "Group", Value = item.group or "Other" },
+            { Label = "Owned", Value = tostring(State.GetOwned(item.id)) },
+            { Label = "Action", Value = State.GetAction() .. " " .. tostring(State.Quantity.value) },
+        },
+        Description = item.id,
+    }, { Width = 310 })
+end
+
+local function DrawItemList(title, items)
+    DrawItemControls()
+    Buttons.Break("", title .. "  /  " .. tostring(#items))
+
+    local lastGroup
+    for _, item in ipairs(items) do
+        if item.group ~= lastGroup then
+            Buttons.Break("", item.group)
+            lastGroup = item.group
+        end
+        local _, data = Buttons.OptionExtended(item.name, "", State.GetSummary(),
+            "Apply the selected inventory action to this item.", function()
+                State.Apply(item)
+            end)
+        if IsFocused(data) then SubmitItemInfo(item, title) end
+    end
+end
+
+local function CraftingView()
+    DrawItemList("Crafting Components", Items.CraftingComponents)
+end
+
+local function ConsumablesView()
+    DrawItemList("Health & Consumables", Items.Consumables)
+end
+
+local function BuffsView()
+    DrawItemList("Boosters & Buffs", Items.Buffs)
+end
+
+local bulkQuantity = { value = 1, min = 1, max = 999, step = 1 }
+
+local bulkActions = {
+    { name = "All Crafting Components", detail = "Every standard crafting component", action = Items.Actions.GiveAllCraftingComponents },
+    { name = "Item Components", detail = "All item component tiers", action = Items.Actions.GiveItemComponents },
+    { name = "Quickhack Components", detail = "All quickhack component tiers", action = Items.Actions.GiveQuickhackComponents },
+    { name = "Upgrade Components", detail = "All upgrade component tiers", action = Items.Actions.GiveUpgradeComponents },
+    { name = "All Consumables", detail = "MaxDocs, Bounce Backs, and boosters", action = Items.Actions.GiveAllConsumables },
+    { name = "MaxDocs", detail = "Every MaxDoc tier", action = Items.Actions.GiveMaxDocs },
+    { name = "Bounce Backs", detail = "Every Bounce Back tier", action = Items.Actions.GiveBounceBacks },
+    { name = "Boosters", detail = "All standard boosters", action = Items.Actions.GiveBoosters },
+    { name = "All Buff Items", detail = "Black-market, booster, and food buffs", action = Items.Actions.GiveAllBuffs },
 }
 
--- === Give All submenu ===
-local function ItemsGiveAllView()
-    Buttons.IntClick("Give All Crafting Components", refs.allCrafting,
-        "Gives all crafting components at once.", function()
-            ItemActions.GiveAllCraftingComponents(refs.allCrafting.value)
+local function BulkView()
+    Buttons.Int("Quantity Per Item", bulkQuantity, "Amount of every item included in the selected kit.")
+    Buttons.Break("", "Quick Kits")
+    for _, entry in ipairs(bulkActions) do
+        local current = entry
+        Buttons.OptionExtended(current.name, "", "+" .. tostring(bulkQuantity.value), current.detail, function()
+            current.action(bulkQuantity.value)
+            State.RefreshInventory()
+            Notification.Success("Added " .. current.name, 2)
         end)
-
-    Buttons.IntClick("Give Item Components", refs.itemComp,
-        "Gives basic item components.", function()
-            ItemActions.GiveItemComponents(refs.itemComp.value)
-        end)
-
-    Buttons.IntClick("Give Quickhack Components", refs.quickhackComp,
-        "Gives quickhack components.", function()
-            ItemActions.GiveQuickhackComponents(refs.quickhackComp.value)
-        end)
-
-    Buttons.IntClick("Give Upgrade Components", refs.upgradeComp,
-        "Gives upgrade components.", function()
-            ItemActions.GiveUpgradeComponents(refs.upgradeComp.value)
-        end)
-
-    Buttons.IntClick("Give All Consumables", refs.allConsum,
-        "Gives all consumables (MaxDocs, BounceBacks, Boosters).", function()
-            ItemActions.GiveAllConsumables(refs.allConsum.value)
-        end)
-
-    Buttons.IntClick("Give MaxDocs", refs.maxDocs,
-        "Gives all MaxDocs.", function()
-            ItemActions.GiveMaxDocs(refs.maxDocs.value)
-        end)
-
-    Buttons.IntClick("Give BounceBacks", refs.bounceBacks,
-        "Gives all BounceBacks.", function()
-            ItemActions.GiveBounceBacks(refs.bounceBacks.value)
-        end)
-
-    Buttons.IntClick("Give Boosters", refs.boosters,
-        "Gives all boosters.", function()
-            ItemActions.GiveBoosters(refs.boosters.value)
-        end)
-
-    Buttons.IntClick("Give All Buffs", refs.allBuffs,
-        "Gives all buffs (blackmarket, boosters, food).", function()
-            ItemActions.GiveAllBuffs(refs.allBuffs.value)
-        end)
+    end
 end
 
-local giveAllMenu = { title = "Give All", view = ItemsGiveAllView }
+local recipeActions = {
+    { name = "Mod Recipes", detail = "Cyberware and weapon mod recipes", action = Items.ModRecipes.GiveAllModRecipes },
+    { name = "Quickhack Recipes", detail = "All quickhack crafting recipes", action = Items.QuickhackRecipes.GiveAllQuickhackRecipes },
+    { name = "Weapon Recipes", detail = "All weapon crafting recipes", action = Items.WeaponRecipes.GiveAllWeaponRecipes },
+    { name = "Clothing Recipes", detail = "All clothing crafting recipes", action = Items.ClothingRecipes.GiveAllClothingRecipes },
+    { name = "Grenade Recipes", detail = "All grenade crafting recipes", action = Items.GrenadeRecipes.GiveAllGrenadeRecipes },
+}
 
-local compRefs, consumRefs, buffRefs = nil, nil, nil
+local function RecipesView()
+    for _, entry in ipairs(recipeActions) do
+        local current = entry
+        Buttons.Option(current.name, current.detail, function()
+            current.action()
+            Notification.Success("Unlocked " .. current.name, 2)
+        end)
+    end
+end
+
+local bulkMenu = { title = "Quick Kits", view = BulkView }
+local craftingMenu = { title = "Crafting Components", view = CraftingView }
+local consumablesMenu = { title = "Health & Consumables", view = ConsumablesView }
+local buffsMenu = { title = "Boosters & Buffs", view = BuffsView }
+local recipesMenu = { title = "Crafting Recipes", view = RecipesView }
 
 local function ItemsMainView()
-    if not compRefs then
-        compRefs = {}
-        for i, _ in ipairs(CraftingComponents) do
-            compRefs[i] = { value = 1, min = 1, max = 5000, step = 1 }
-        end
-    end
-    if not consumRefs then
-        consumRefs = {}
-        for i, _ in ipairs(Consumables) do
-            consumRefs[i] = { value = 1, min = 1, max = 5000, step = 1 }
-        end
-    end
-    if not buffRefs then
-        buffRefs = {}
-        for i, _ in ipairs(ItemBuffs) do
-            buffRefs[i] = { value = 1, min = 1, max = 5000, step = 1 }
-        end
-    end
-
-    Buttons.Submenu("Give All", giveAllMenu, "Bulk give items by category")
-    Buttons.Option("Give All Mod Recipes", "Unlocks every cyberware & weapon mod recipe.",
-        ItemModRecipes.GiveAllModRecipes)
-    Buttons.Option("Give All Quickhack Recipes", "Unlocks all quickhack crafting recipes.",
-        ItemQuickhackRecipes.GiveAllQuickhackRecipes)
-    Buttons.Option("Give All Weapon Recipes", "Unlocks all weapon crafting recipes.",
-        ItemWeaponRecipes.GiveAllWeaponRecipes)
-    Buttons.Option("Give All Clothing Recipes", "Unlocks all clothing recipes.",
-        ItemClothingRecipes.GiveAllClothingRecipes)
-    Buttons.Option("Give All Grenade Recipes", "Unlocks all grenade crafting recipes.",
-        ItemGrenadeRecipes.GiveAllGrenadeRecipes)
-
-    local lastGroup = nil
-    for i, data in ipairs(CraftingComponents) do
-        if data.group ~= lastGroup then
-            Buttons.Break("", data.group)
-            lastGroup = data.group
-        end
-        local ref = compRefs[i]
-        Buttons.IntClick(data.name, ref,
-            "Give: " .. data.name, function()
-                Inventory.GiveItem(data.id, ref.value)
-            end)
-    end
-
-    lastGroup = nil
-    for i, data in ipairs(Consumables) do
-        if data.group ~= lastGroup then
-            Buttons.Break("", data.group)
-            lastGroup = data.group
-        end
-        local ref = consumRefs[i]
-        Buttons.IntClick(data.name, ref,
-            "Give: " .. data.name, function()
-                Inventory.GiveItem(data.id, ref.value)
-            end)
-    end
-
-    lastGroup = nil
-    for i, data in ipairs(ItemBuffs) do
-        if data.group ~= lastGroup then
-            Buttons.Break("", data.group)
-            lastGroup = data.group
-        end
-        local ref = buffRefs[i]
-        Buttons.IntClick(data.name, ref,
-            "Give: " .. data.name, function()
-                Inventory.GiveItem(data.id, ref.value)
-            end)
-    end
+    Buttons.Submenu("Quick Kits", bulkMenu, "Add complete groups of commonly used items.")
+    Buttons.Submenu("Crafting Components", craftingMenu, "Add or remove individual crafting components.")
+    Buttons.Submenu("Health & Consumables", consumablesMenu, "Manage MaxDocs, Bounce Backs, and boosters.")
+    Buttons.Submenu("Boosters & Buffs", buffsMenu, "Manage temporary buff items and special consumables.")
+    Buttons.Submenu("Crafting Recipes", recipesMenu, "Unlock complete groups of crafting recipes.")
 end
 
-return { title = "Items", view = ItemsMainView }
+return { title = "Essentials", view = ItemsMainView }

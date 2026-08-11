@@ -103,6 +103,8 @@ local function GetRarity(recordId, record)
 end
 
 function WeaponLoader:LoadAll()
+    self.weapons = {}
+    self.indexById = {}
     local records = TweakDB:GetRecords("gamedataWeaponItem_Record")
     if not records or #records == 0 then
         Logger.Log("WeaponLoader: No weapon records found.")
@@ -111,7 +113,7 @@ function WeaponLoader:LoadAll()
 
     for _, rec in ipairs(records) do
         local id = utils.SafeCall(function() return rec:GetID().value end)
-        if id and id:find("^Items%.") then
+        if id and id:find("^Items%.") and not self.indexById[id] then
             local tags = utils.GetTags(rec)
 
             local data = {
@@ -136,8 +138,10 @@ function WeaponLoader:LoadAll()
                 tags = tags
             }
 
-            table.insert(self.weapons, data)
-            self.indexById[id] = data
+            if data.displayName ~= "Unknown" then
+                table.insert(self.weapons, data)
+                self.indexById[id] = data
+            end
         end
     end
 

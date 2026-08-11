@@ -57,13 +57,13 @@ local function ViewWorldWeather()
     weatherRadio.index = GetCurrentWeatherIndex()
 
     Buttons.OptionExtended(L("worldweather.current.label"), "", WorldWeather.GetCurrentWeather(), L("worldweather.current.tip"))
+    Buttons.Break("", "Weather Control")
     Buttons.Toggle(L("worldweather.freeze.label"), WorldWeather.freezeWeather, L("worldweather.freeze.tip"))
     Buttons.Option(L("worldweather.random.label"), L("worldweather.random.tip"), WorldWeather.SetRandomWeather)
     Buttons.Option(L("worldweather.reset.label"), L("worldweather.reset.tip"), WorldWeather.ResetWeather)
     Buttons.Int(L("worldweather.transitionduration.label"), transitionSeconds, L("worldweather.transitionduration.tip"))
 
     Buttons.Break("", L("worldweather.weathertypebreak.label"))
-
     Buttons.Radio(L("worldweather.weathertype.label"), weatherRadio, weatherOptions, L("worldweather.weathertype.tip"), function()
         local selectedWeather = weatherMap[weatherRadio.index]
         WorldWeather.SetWeather(selectedWeather, transitionSeconds.value)

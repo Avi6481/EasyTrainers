@@ -1,5 +1,6 @@
 local Explosion = require("Utils/Explosion")
 local Logger = require("Core/Logger")
+local Weapon = require("Utils/Weapon")
 
 local ExplosiveKnives = {}
 ExplosiveKnives.enabled = { value = false }
@@ -12,6 +13,7 @@ local lastExplosionTime = -1
 function ExplosiveKnives.Tick(eventData)
     if not ExplosiveKnives.enabled.value then return end
     if not eventData then return end
+    if Weapon.IsRangedEquipped() then return end
 
     local currentTime = os.clock()
     if currentTime - lastExplosionTime < cooldown then return end

@@ -1,6 +1,6 @@
 local UI = require("UI")
 local Buttons = UI.Buttons
-local NotificationManager = UI.Notifier
+local Notification = UI.Notification
 
 local GameFacts = require("Utils").Facts
 local Facts = require("Features/World").Facts
@@ -55,7 +55,11 @@ local function DrawRelationshipFacts()
     end
 end
 
+local relationshipFactsMenu = { title = "Relationship Tracking", view = DrawRelationshipFacts }
+
 local function GameFactsView()
+    Buttons.Submenu("Relationship Tracking", relationshipFactsMenu,
+        "View the current relationship and story progression values.")
     Buttons.Dropdown(
         L("gamefacts.category.label"),
         selectedCategory,
@@ -69,17 +73,16 @@ local function GameFactsView()
     local entries = GameFacts.FactFlags[categoryKey]
     InitializeCategory(categoryKey)
 
-    Buttons.Break("", tip("gamefacts.flagsbreak.tip", { category = categoryLabel }))
+    Buttons.Break("", categoryLabel .. "  /  " .. tostring(#entries))
 
     for _, entry in ipairs(entries) do
         local toggle = GetOrCreateToggle(entry)
         Buttons.Toggle(entry.name, toggle, entry.desc, function()
-            toggle.value = not Facts.IsTrue(entry.id)
             Facts.SetBool(entry.id, toggle.value)
-            NotificationManager.Push(
+            Notification.Info(
                 toggle.value
                     and tip("gamefacts.factnotification.enabled", { name = entry.name })
-                    or tip("gamefacts.factnotification.disabled", { name = entry.name })
+                    or tip("gamefacts.factnotification.disabled", { name = entry.name }), 2
             )
         end)
     end

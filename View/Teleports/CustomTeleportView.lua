@@ -1,5 +1,4 @@
 local Buttons = require("UI").Buttons
-local TextInput = require("UI/Options/TextInput")
 local Notification = require("UI").Notification
 
 local JsonHelper = require("Core/JsonHelper")
@@ -63,7 +62,7 @@ local function SaveCustomTeleport()
     if not ValidateTeleport(entry) then return end
 
     local path = "Config/JSON/Teleports.json"
-    local data, _ = JsonHelper.Read(path)
+    local data = JsonHelper.LoadOrCreate(path, { teleports = {} })
     if type(data) ~= "table" then
         data = { teleports = {} }
     elseif type(data.teleports) ~= "table" then
@@ -136,5 +135,5 @@ local function CustomTeleportViewFunction()
     end
 end
 
-local CustomTeleportView = { title = L("teleport.customteleportview.title"), view = CustomTeleportViewFunction }
+local CustomTeleportView = { title = "teleport.customteleportview.title", view = CustomTeleportViewFunction }
 return CustomTeleportView

@@ -1,10 +1,12 @@
 local Teleport = require("Utils/Teleport")
+local Weapon = require("Utils/Weapon")
 
 local FlyingThunderGod = {}
 FlyingThunderGod.enabled = { value = false }
 
 function FlyingThunderGod.Tick(eventData)
     if not FlyingThunderGod.enabled.value then return end
+    if Weapon.IsRangedEquipped() then return end
 
     local player = Game.GetPlayer()
     if not player then return end

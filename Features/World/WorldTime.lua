@@ -2,7 +2,10 @@ local WorldTime = {}
 local Logger = require("Core/Logger")
 local Notification = require("UI").Notification
 
-local timeSystem = Game.GetTimeSystem()
+local function GetTimeSystem()
+    local ok, system = pcall(Game.GetTimeSystem)
+    return ok and system or nil
+end
 
 WorldTime.daySpeedMultiplier = { value = 2.0, min = 1.0, max = 10.0, step = 0.5, enabled = false }
 WorldTime.nightSpeedMultiplier = { value = 2.0, min = 1.0, max = 10.0, step = 0.5, enabled = false }
@@ -26,7 +29,10 @@ local skipState = {
 
 
 function WorldTime.GetTime()
-    local gameTime = timeSystem:GetGameTime()
+    local system = GetTimeSystem()
+    if not system then return { hours = 0, minutes = 0, seconds = 0 } end
+    local ok, gameTime = pcall(function() return system:GetGameTime() end)
+    if not ok or not gameTime then return { hours = 0, minutes = 0, seconds = 0 } end
 
     return {
         hours = gameTime:Hours(),
@@ -38,8 +44,11 @@ function WorldTime.GetTime()
 end
 
 function WorldTime.SetGameTime(hours, minutes, seconds)
-    timeSystem:SetGameTimeByHMS(hours, minutes, seconds, "EasyTrainerWorldTime")
-    -- Logger.Log(string.format("[EasyTrainerWorldTime] Set game time to %02d:%02d:%02d", hours, minutes, seconds))
+    local system = GetTimeSystem()
+    if not system then return false end
+    return pcall(function()
+        system:SetGameTimeByHMS(hours, minutes, seconds, "EasyTrainerWorldTime")
+    end)
 end
 
 
@@ -77,7 +86,9 @@ function WorldTime.SetTimeNight()     ApplyTimeWithState(22, 0, 0, "Night (22:00
 
 function WorldTime.SkipDays(days, step)
     if not days or days < 1 then days = 1 end
-    local current = timeSystem:GetGameTime()
+    local system = GetTimeSystem()
+    if not system then return end
+    local current = system:GetGameTime()
     skipState.totalStart = current:Seconds()
     skipState.totalTarget = skipState.totalStart + (days * 86400)
     skipState.currentTime = 0
@@ -87,47 +98,58 @@ function WorldTime.SkipDays(days, step)
     skipState.logged = false
 end
 
-local function HandleFreezeTime()
+local function HandleFreezeTime(delta)
     if WorldTime.toggleFreezeTime.value then
         if not WorldTime.frozenTime then
-            local current = timeSystem:GetGameTime()
+            local current = WorldTime.GetTime()
             WorldTime.frozenTime = {
-                h = current:Hours(),
-                m = current:Minutes(),
-                s = current:Seconds()
+                h = current.hours,
+                m = current.minutes,
+                s = current.seconds
             }
         end
-        timeSystem:SetGameTimeByHMS(WorldTime.frozenTime.h, WorldTime.frozenTime.m, WorldTime.frozenTime.s, "EasyTrainerFreezeTime"
-        )
+        WorldTime.freezeTick = (WorldTime.freezeTick or 0) + (delta or 0)
+        if WorldTime.freezeTick >= 0.25 then
+            WorldTime.freezeTick = 0
+            WorldTime.SetGameTime(WorldTime.frozenTime.h, WorldTime.frozenTime.m, WorldTime.frozenTime.s)
+        end
         return true
     else
         WorldTime.frozenTime = nil
+        WorldTime.freezeTick = 0
     end
 end
 
-local function HandleTimeLapse()
+local function HandleTimeLapse(delta)
     if not WorldTime.toggleTimeLapse.value then return end
-    
-    local now = timeSystem:GetGameTime()
-    local hour = now:Hours()
-    local minute = now:Minutes()
-    local second = now:Seconds()
+    WorldTime.timeLapseTick = (WorldTime.timeLapseTick or 0) + (delta or 0)
+    if WorldTime.timeLapseTick < 0.1 then return end
+    local elapsed = WorldTime.timeLapseTick
+    WorldTime.timeLapseTick = 0
+
+    local now = WorldTime.GetTime()
+    local hour, minute, second = now.hours, now.minutes, now.seconds
 
     local totalSeconds = hour * 3600 + minute * 60 + second
-    totalSeconds = totalSeconds + (10 * WorldTime.timeLapseMultiplier.value)
+    totalSeconds = totalSeconds + (elapsed * WorldTime.timeLapseMultiplier.value * 60)
 
     local h = math.floor((totalSeconds / 3600) % 24)
     local m = math.floor((totalSeconds % 3600) / 60)
     local s = math.floor(totalSeconds % 60)
 
-    timeSystem:SetGameTimeByHMS(h, m, s, "EasyTrainerTimeLapse")
+    WorldTime.SetGameTime(h, m, s)
 end
 
 
-local function HandleSyncToSystemClock()
+local function HandleSyncToSystemClock(delta)
     if WorldTime.toggleSyncToSystemClock.value then
+        WorldTime.syncTick = (WorldTime.syncTick or 0) + (delta or 0)
+        if WorldTime.syncTick < 0.5 then return end
+        WorldTime.syncTick = 0
         local now = os.date("*t")
         WorldTime.SetGameTime(now.hour, now.min, now.sec)
+    else
+        WorldTime.syncTick = 0
     end
 end
 
@@ -152,7 +174,7 @@ local function HandleSkipDays(delta)
         local h = math.floor((skipState.totalStart / 3600) % 24)
         local m = math.floor((skipState.totalStart % 3600) / 60)
         local s = math.floor(skipState.totalStart % 60)
-        timeSystem:SetGameTimeByHMS(h, m, s, "EasyTrainerWorldTime")
+        WorldTime.SetGameTime(h, m, s)
     end
 end
 
@@ -161,10 +183,8 @@ local function HandleFasterTime(delta)
     if WorldTime.fasterTimeTick >= 100 then
         WorldTime.fasterTimeTick = 0
 
-        local now = timeSystem:GetGameTime()
-        local hour = now:Hours()
-        local minute = now:Minutes()
-        local second = now:Seconds()
+        local now = WorldTime.GetTime()
+        local hour, minute, second = now.hours, now.minutes, now.seconds
 
         local isDay = hour >= 6 and hour < 18
         local isNight = not isDay
@@ -181,7 +201,7 @@ local function HandleFasterTime(delta)
             local m = math.floor((totalSeconds % 3600) / 60)
             local s = math.floor(totalSeconds % 60)
 
-            timeSystem:SetGameTimeByHMS(h, m, s, "EasyTrainerFasterTime")
+            WorldTime.SetGameTime(h, m, s)
         end
     end
 end
@@ -190,13 +210,12 @@ end
 
 
 function WorldTime.Update(delta)
-    HandleSyncToSystemClock()
-
-    if HandleFreezeTime() then return end
+    if HandleFreezeTime(delta) then return end
+    HandleSyncToSystemClock(delta)
 
     HandleSkipDays(delta)
     HandleFasterTime(delta)
-    HandleTimeLapse()
+    HandleTimeLapse(delta)
 end
 
 

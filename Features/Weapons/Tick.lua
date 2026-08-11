@@ -1,7 +1,9 @@
 local Weapons = require("Features/Weapons")
+local Weapon = require("Utils/Weapon")
 local WeaponTick = {}
 
 function WeaponTick.TickHandler(deltaTime)
+    Weapon.Tick(deltaTime)
     Weapons.GravityGun.Tick()
     Weapons.TeleportShot.Tick()
     Weapons.InfiniteAmmo.Tick()
@@ -26,6 +28,7 @@ function WeaponTick.TickHandler(deltaTime)
     Weapons.StatModifiers.PenetrationRounds.Tick(deltaTime)
     Weapons.StatModifiers.HipfireAccuracy.Tick(deltaTime)
     Weapons.StatModifiers.AdsAccuracy.Tick(deltaTime)
+    Weapon.EndFrame()
 end
 
 function WeaponTick.HandleProjectileHit(self, eventData)

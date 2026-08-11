@@ -64,7 +64,7 @@ local function SaveResult(tp)
     if not savePath then return end
     local outPath = savePath:gsub("%.json$", "_results.json")
 
-    local existing = JsonHelper.Read(outPath)
+    local existing = JsonHelper.LoadOrCreate(outPath, {})
     if type(existing) ~= "table" then
         existing = {}
     end

@@ -50,7 +50,11 @@ function VehiclePreview.Update(deltaTime)
 
     local des = Game.GetDynamicEntitySystem()
     local player = Game.GetPlayer()
-    if not (des and player and des:IsSpawned(previewID)) then return end
+    if not (des and player) then return end
+    if not des:IsSpawned(previewID) then
+        previewID, previewDBID, rotation = nil, nil, 0
+        return
+    end
 
     local ent = des:GetEntity(previewID)
     if not ent then return end
@@ -69,6 +73,7 @@ function VehiclePreview.Clear()
     if not previewID then return end
     local des = Game.GetDynamicEntitySystem()
     if des then des:DeleteEntity(previewID) end
+    VehicleSpawning.Forget(previewID)
     -- Logger.Log("VehiclePreview: cleared preview " .. tostring(previewID))
     previewID, previewDBID, rotation = nil, nil, 0
 end

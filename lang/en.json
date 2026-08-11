@@ -1,4 +1,8 @@
 {
+  "_meta": {
+    "name": "English",
+    "code": "en"
+  },
   "loadmessage": "Language set to English. Welcome, choomba!",
   "mainmenu": {
     "title": "Main Menu",
@@ -45,8 +49,8 @@
       "tip": "Change the language used for the trainer's interface."
     },
     "items": {
-      "label": "Item Menu(Alpha)",
-      "tip": "Browse items by category, consumables, crafting, and buffs. (Item Browser is very alpha)"
+      "label": "Items Menu",
+      "tip": "Browse, search, add, or remove items from a categorized inventory catalog."
     },
     "settingsmenu": {
       "label": "Settings Menu",
@@ -258,6 +262,7 @@
     },
     "attributes": {
       "label": "Attribute",
+      "tip": "Select the attribute to manage.",
       "setlevel": {
         "label": "Set Attribute Level",
         "tip": "Set base level for this attribute."
@@ -619,8 +624,8 @@
     "categoryprefix": "Category: {value}",
     "manufacturerprefix": "Manufacturer: {value}",
     "affiliationprefix": "Affiliation: {value}",
-    "unlockedtip": "Note: Enabled vehicles are unlocked and appear in your owned menu. Click to toggle them on or off.\n\n{details}",
-    "spawntip": "Note: You may need to click twice to request the vehicle.\n\n{details}",
+    "unlockedtip": "Toggle whether this vehicle appears in your owned-vehicle list.",
+    "spawntip": "Spawn this vehicle near the player.",
     "vehicledetails": "TweakDBID: {id}\nManufacturer: {manufacturer}\nCategory: {category}\nAffiliation: {faction}\nProduction Year: {year}\nDescription: {description}"
   },
   "vehiclemenu": {
@@ -1390,6 +1395,8 @@
     "creator_all": "All",
     "district_all": "All Districts",
     "area_all": "All Areas",
+    "district_unknown": "Unknown District",
+    "area_unknown": "Unknown Area",
     "quick_closest_vendor": "Closest",
     "quick_apartment": "Apartment",
     "quick_closest_vendor_notify": "Teleported to closest vendor:",
@@ -1532,6 +1539,18 @@
         "parentDistrict": "Unknown District",
         "childDistrict": "Unknown Area"
       }
+    }
+  },
+  "itemsbrowser": {
+    "title": "Items Menu",
+    "search": {
+      "title": "Search by ID"
+    },
+    "giveall": {
+      "title": "Give All"
+    },
+    "essentials": {
+      "title": "Essential Items"
     }
   },
   "settingsmenu": {
@@ -1725,8 +1744,8 @@
           "tip": "Font size for the main header title."
         },
         "fontsizesub": {
-          "label": "Subtitle Font Size",
-          "tip": "Font size for secondary header text."
+          "label": "Breadcrumb Font Size",
+          "tip": "Font size for the navigation breadcrumb below the header."
         },
         "background": {
           "label": "Background",
@@ -2394,8 +2413,13 @@
     }
   },
   "languagemenu": {
+    "title": "Language",
     "label": "Select Language",
     "tip": "Choose your preferred UI language.",
+    "current": "Current language",
+    "onlyone": "Only English is installed. Add another JSON language pack and refresh this list.",
+    "loadfailed": "That language file could not be loaded. English is still available as a fallback.",
+    "savefailed": "The language changed for this session, but the preference could not be saved.",
     "reload": {
       "label": "Refresh Languages",
       "tip": "Refreshes the available language list to include newly added files."

@@ -9,4 +9,5 @@ Items.Consumables = require("Features/Items/ItemsConsumables")
 Items.CraftingComponents = require("Features/Items/ItemsCraftingComponents")
 Items.WeaponRecipes = require("Features/Items/ItemWeaponRecipes")
 Items.Buffs = require("Features/Items/ItemBuffs")
+Items.BrowserState = require("Features/Items/ItemBrowserState")
 return Items

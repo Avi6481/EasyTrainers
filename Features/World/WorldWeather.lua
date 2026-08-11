@@ -7,6 +7,8 @@ end
 
 WorldWeather.freezeWeather = { value = false }
 WorldWeather.lockedWeather = nil
+WorldWeather.wasFrozen = false
+WorldWeather.freezeCheckAt = 0
 
 WorldWeather.weatherStates = {
     "24h_weather_sunny",
@@ -61,7 +63,19 @@ function WorldWeather.ResetWeather()
 end
 
 function WorldWeather.Update()
-    if WorldWeather.freezeWeather.value and WorldWeather.lockedWeather then
+    if WorldWeather.freezeWeather.value and not WorldWeather.wasFrozen then
+        WorldWeather.lockedWeather = WorldWeather.GetCurrentWeather()
+        WorldWeather.wasFrozen = true
+    elseif not WorldWeather.freezeWeather.value then
+        WorldWeather.lockedWeather = nil
+        WorldWeather.wasFrozen = false
+        return
+    end
+
+    local now = os.clock()
+    if now < WorldWeather.freezeCheckAt then return end
+    WorldWeather.freezeCheckAt = now + 1
+    if WorldWeather.lockedWeather then
         local current = WorldWeather.GetCurrentWeather()
         if current ~= WorldWeather.lockedWeather then
             WorldWeather.SetWeather(WorldWeather.lockedWeather, 5)

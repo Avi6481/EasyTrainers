@@ -3,7 +3,7 @@ local JsonHelper = require("Core/JsonHelper")
 local Logger = require("Core/Logger")
 
 local NavigationConfig = {}
-NavigationConfig.filePath = "config/JSON/navigation.json"
+NavigationConfig.filePath = "Config/JSON/Navigation.json"
 
 local function collectData()
     return {
@@ -34,7 +34,7 @@ function NavigationConfig.Save()
 end
 
 function NavigationConfig.Load()
-    local data, err = JsonHelper.Read(NavigationConfig.filePath)
+    local data, _, err = JsonHelper.LoadOrCreate(NavigationConfig.filePath, collectData())
     if data then
         applyData(data)
         Logger.Log("NavigationConfig: Navigation settings loaded successfully.")

@@ -1,4 +1,5 @@
 local SmartBlade = {}
+local Weapon = require("Utils/Weapon")
 
 SmartBlade.enabled = { value = false }
 
@@ -8,6 +9,7 @@ function SmartBlade.Tick(self)
     if not SmartBlade.enabled.value then
         return
     end
+    if Weapon.IsRangedEquipped() then return end
     local player = Game.GetPlayer()
     if not player then return end
 

@@ -5,8 +5,6 @@ local Cooldown = Self.StatModifiers.Cooldown
 local StatModifiers = Self.StatModifiers
 
 
-local CustomModifiersView = require("View/Self/CustomModifiersView")
-
 local function PlayerStatsView()
     Buttons.Toggle(L("modifiers.infinitestamina.label"), StatModifiers.Enhancements.toggleInfiniteStamina, tip("modifiers.infinitestamina.tip"))
     Buttons.Toggle(L("modifiers.infiniteoxygen.label"), StatModifiers.Enhancements.toggleInfiniteOxygen, tip("modifiers.infiniteoxygen.tip"))

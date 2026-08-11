@@ -8,6 +8,7 @@ GravityGun.enabled = { value = false }
 
 function GravityGun.Tick()
     if not GravityGun.enabled.value then
+        heldObject = nil
         return
     end
 
@@ -28,6 +29,7 @@ function GravityGun.Tick()
         if isAiming then
             local camOrigin = player:GetWorldPosition()
             local lookAt = targetingSystem:GetLookAtPosition(player, true, false)
+            if not lookAt then heldObject = nil return end
 
             local dir = {
                 x = lookAt.x - camOrigin.x,
@@ -35,6 +37,7 @@ function GravityGun.Tick()
                 z = lookAt.z - camOrigin.z
             }
             local mag = math.sqrt(dir.x^2 + dir.y^2 + dir.z^2)
+            if mag < 0.001 then heldObject = nil return end
             dir.x, dir.y, dir.z = dir.x / mag, dir.y / mag, dir.z / mag
 
             local targetPos = Vector4.new(
@@ -44,7 +47,10 @@ function GravityGun.Tick()
                 1.0
             )
             
-            teleportSystem:Teleport(heldObject, targetPos, EulerAngles.new(0, 0, 0)) 
+            local moved = pcall(function()
+                teleportSystem:Teleport(heldObject, targetPos, EulerAngles.new(0, 0, 0))
+            end)
+            if not moved then heldObject = nil end
             -- Not able to apply force to the vehicle or any entity that is above a certain limit of height for some reason they just freeze
         else
             heldObject = nil
