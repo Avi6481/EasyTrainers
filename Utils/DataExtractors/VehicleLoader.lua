@@ -265,6 +265,8 @@ function VehicleLoader:LoadAll()
     end
 
     local injectedCount = 0
+    local baseCount = 0
+    local addOnCount = 0
 
     for _, rec in ipairs(records) do
         local id = utils.SafeCall(function() return rec:GetID().value end)
@@ -273,12 +275,10 @@ function VehicleLoader:LoadAll()
 
         local idLower = id:lower()
 
-        local isVanilla = id:match("^Vehicle%.v_") or id:match("^Vehicle%.vcd")
+        local isVanilla = id:match("^Vehicle%.v_") ~= nil or id:match("^Vehicle%.vcd") ~= nil
         local isDealerVehicle = self:IsVirtualDealerVehicle(id)
-        local entityPath = utils.SafeCall(function() return rec:EntityTemplatePath() end)
-        local hasEntity = entityPath ~= nil and tostring(entityPath) ~= ""
-        if not isVanilla and not isDealerVehicle and not hasEntity then goto continue end
-        local isModded = not isVanilla
+        if not isVanilla and not isDealerVehicle then goto continue end
+        local isModded = not isVanilla and isDealerVehicle
 
         local manufacturer = GetManufacturer(rec)
         local displayName = utils.GetDisplayName(rec)
@@ -327,6 +327,7 @@ function VehicleLoader:LoadAll()
 
         table.insert(self.vehicles, data)
         self.indexById[id] = data
+        if isModded then addOnCount = addOnCount + 1 else baseCount = baseCount + 1 end
 
         if self:AddVehicleToList(id) then
             injectedCount = injectedCount + 1
@@ -335,9 +336,10 @@ function VehicleLoader:LoadAll()
         ::continue::
     end
 
+    local variantCount = math.max(0, #self.vehicles - baseCount - addOnCount)
     Logger.Log(string.format(
-        "VehicleLoader: Loaded %d vehicles (Added %d new).",
-        #self.vehicles, injectedCount
+        "VehicleLoader: Loaded %d browsable vehicles (%d base, %d add-on), %d variants; added %d to vehicle list.",
+        baseCount + addOnCount, baseCount, addOnCount, variantCount, injectedCount
     ))
 end
 
