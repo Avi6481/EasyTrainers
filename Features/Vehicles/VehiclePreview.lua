@@ -7,6 +7,7 @@ local VehiclePreview = {}
 
 local previewID, previewDBID = nil, nil
 local rotation, distance, spinSpeed = 0.0, 13.0, 30.0
+local spawnWait, spawnTimeout = 0.0, 8.0
 local active = false
 
 function VehiclePreview.SetActive(flag)
@@ -22,11 +23,12 @@ function VehiclePreview.Spawn(tweakDBIDStr)
         return
     end
 
-    if previewDBID == tweakDBIDStr and previewID then
+    if previewDBID == tweakDBIDStr then
         return
     end
 
     VehiclePreview.Clear()
+    previewDBID = tweakDBIDStr
 
     local entityID = VehicleSpawning.SpawnVehicle(tweakDBIDStr, distance, false, false)
     if not entityID then
@@ -35,8 +37,8 @@ function VehiclePreview.Spawn(tweakDBIDStr)
     end
 
     previewID = entityID
-    previewDBID = tweakDBIDStr
     rotation = 0
+    spawnWait = 0
     -- Logger.Log("VehiclePreview: spawned preview " .. tostring(entityID))
 end
 
@@ -52,9 +54,16 @@ function VehiclePreview.Update(deltaTime)
     local player = Game.GetPlayer()
     if not (des and player) then return end
     if not des:IsSpawned(previewID) then
-        previewID, previewDBID, rotation = nil, nil, 0
+        spawnWait = spawnWait + deltaTime
+        if spawnWait >= spawnTimeout then
+            des:DeleteEntity(previewID)
+            VehicleSpawning.Forget(previewID)
+            previewID, rotation, spawnWait = nil, 0, 0
+            Logger.Log("VehiclePreview: timed out spawning " .. tostring(previewDBID))
+        end
         return
     end
+    spawnWait = 0
 
     local ent = des:GetEntity(previewID)
     if not ent then return end
@@ -70,12 +79,13 @@ function VehiclePreview.Update(deltaTime)
 end
 
 function VehiclePreview.Clear()
-    if not previewID then return end
-    local des = Game.GetDynamicEntitySystem()
-    if des then des:DeleteEntity(previewID) end
-    VehicleSpawning.Forget(previewID)
-    -- Logger.Log("VehiclePreview: cleared preview " .. tostring(previewID))
-    previewID, previewDBID, rotation = nil, nil, 0
+    if previewID then
+        local des = Game.GetDynamicEntitySystem()
+        if des then des:DeleteEntity(previewID) end
+        VehicleSpawning.Forget(previewID)
+        -- Logger.Log("VehiclePreview: cleared preview " .. tostring(previewID))
+    end
+    previewID, previewDBID, rotation, spawnWait = nil, nil, 0, 0
 end
 
 return VehiclePreview
