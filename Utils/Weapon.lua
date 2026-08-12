@@ -5,6 +5,12 @@ local Weapon = {
     lastWeaponID = nil,
     lastItemKey = nil,
     hasChanged = false,
+    snapshotValid = false,
+    currentItem = nil,
+    currentItemData = nil,
+    currentItemID = nil,
+    currentIsRanged = false,
+    currentIsMelee = false,
     lastCheckTime = 0,
     checkInterval = 1
 }
@@ -60,8 +66,7 @@ function Weapon.GetAllRangedWeapons()
     return ranged
 end
 
--- Get equipped right-hand weapon (returns {item, itemData, itemID} or nils)
-function Weapon.GetEquippedRightHand()
+local function ReadEquippedRightHand()
     local player = Game.GetPlayer()
     local ts = Game.GetTransactionSystem()
     if not player or not ts then return nil, nil, nil end
@@ -75,12 +80,31 @@ function Weapon.GetEquippedRightHand()
     return item, itemData, item:GetItemID()
 end
 
+-- Get equipped right-hand weapon (returns {item, itemData, itemID} or nils).
+-- Weapon.Tick caches this lookup for the rest of the frame because every enabled
+-- weapon modifier asks for the same data while processing a weapon switch.
+function Weapon.GetEquippedRightHand()
+    if Weapon.snapshotValid then
+        return Weapon.currentItem, Weapon.currentItemData, Weapon.currentItemID
+    end
+
+    return ReadEquippedRightHand()
+end
+
 function Weapon.IsRangedEquipped()
+    if Weapon.snapshotValid then
+        return Weapon.currentIsRanged
+    end
+
     local _, itemData = Weapon.GetEquippedRightHand()
     return itemData and itemData:HasTag(CName("RangedWeapon")) or false
 end
 
 function Weapon.IsMeleeEquipped()
+    if Weapon.snapshotValid then
+        return Weapon.currentIsMelee
+    end
+
     local _, itemData = Weapon.GetEquippedRightHand()
     return itemData and itemData:HasTag(CName("Melee")) or false -- Actually don't remember if the tags include this word but I assume they would
 end
@@ -96,7 +120,18 @@ function Weapon.IsShootingRanged()
 end
 
 function Weapon.Tick(deltaTime)
-    local _, itemData, itemID = Weapon.GetEquippedRightHand()
+    if not Weapon.snapshotValid then
+        local item, itemData, itemID = ReadEquippedRightHand()
+        Weapon.currentItem = item
+        Weapon.currentItemData = itemData
+        Weapon.currentItemID = itemID
+        Weapon.currentIsRanged = itemData and itemData:HasTag(CName("RangedWeapon")) or false
+        Weapon.currentIsMelee = itemData and itemData:HasTag(CName("Melee")) or false
+        Weapon.snapshotValid = true
+    end
+
+    local itemData = Weapon.currentItemData
+    local itemID = Weapon.currentItemID
     if not itemID then
         if Weapon.lastItemKey ~= nil then
             Weapon.lastItemKey = nil
@@ -118,8 +153,21 @@ function Weapon.HasChanged()
     return Weapon.hasChanged
 end
 
+-- Keep a queued weapon refresh visible to one modifier on a later update.
+-- CET game API calls stay on onUpdate; the scheduler in Features/Weapons/Tick
+-- uses this to spread expensive modifier rebuilds across separate frames.
+function Weapon.MarkChanged()
+    Weapon.hasChanged = true
+end
+
 function Weapon.EndFrame()
     Weapon.hasChanged = false
+    Weapon.snapshotValid = false
+    Weapon.currentItem = nil
+    Weapon.currentItemData = nil
+    Weapon.currentItemID = nil
+    Weapon.currentIsRanged = false
+    Weapon.currentIsMelee = false
 end
 
 
