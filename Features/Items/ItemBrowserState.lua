@@ -1,5 +1,8 @@
 local Inventory = require("Utils/Inventory")
 local Notification = require("UI/Panels/Notification/Notification")
+local DataUtils = require("Utils/DataExtractors/DataUtils")
+
+local RECENT_LIMIT = 20
 
 local ItemBrowserState = {
     Action = { index = 1 },
@@ -7,7 +10,30 @@ local ItemBrowserState = {
     Quantity = { value = 1, min = 1, max = 999, step = 1 },
     Owned = nil,
     InventoryItems = nil,
+    Recent = {},
 }
+
+local s_Descriptions = {}
+
+local function Remember(item)
+    for index, entry in ipairs(ItemBrowserState.Recent) do
+        if entry.id == item.id then
+            table.remove(ItemBrowserState.Recent, index)
+            break
+        end
+    end
+    table.insert(ItemBrowserState.Recent, 1, item)
+    if #ItemBrowserState.Recent > RECENT_LIMIT then table.remove(ItemBrowserState.Recent) end
+end
+
+function ItemBrowserState.GetDescription(id)
+    if s_Descriptions[id] then return s_Descriptions[id] end
+    local record = TweakDB:GetRecord(id)
+    local key = record and DataUtils.SafeCall(function() return record:LocalizedDescription() end)
+    local text = key and DataUtils.GetLocalizedSafe(key) or ""
+    s_Descriptions[id] = (text:gsub("<.->", ""))
+    return s_Descriptions[id]
+end
 
 function ItemBrowserState.RefreshInventory()
     ItemBrowserState.InventoryItems = Inventory.GetAllItems() or {}
@@ -38,7 +64,7 @@ function ItemBrowserState.GetSummary(quantity)
     return prefix .. tostring(quantity or ItemBrowserState.Quantity.value)
 end
 
-function ItemBrowserState.Apply(item, quantity)
+function ItemBrowserState.Apply(item, quantity, quiet)
     if not item or not item.id then return false end
     local action = ItemBrowserState.GetAction()
     local amount = action == "Remove All" and ItemBrowserState.GetOwned(item.id)
@@ -46,7 +72,7 @@ function ItemBrowserState.Apply(item, quantity)
     local name = item.name or item.displayName or item.id
     local removing = action ~= "Add"
     if amount < 1 then
-        Notification.Error("You do not own " .. name, 2)
+        if not quiet then Notification.Error("You do not own " .. name, 2) end
         return false
     end
     local success = removing and Inventory.RemoveItem(item.id, amount) or Inventory.GiveItem(item.id, amount)
@@ -75,8 +101,10 @@ function ItemBrowserState.Apply(item, quantity)
                 quantity = updated,
             })
         end
+        Remember(item)
+        if quiet then return success end
         Notification.Success(string.format("%s %dx %s", removing and "Removed" or "Added", amount, name), 2)
-    else
+    elseif not quiet then
         Notification.Error(string.format("Could not %s %s", removing and "remove" or "add", name), 2)
     end
     return success

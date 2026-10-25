@@ -3,6 +3,7 @@ local Submenu = require("UI/Navigation/Submenu")
 local Bindings = require("Controls/Bindings")
 local BindingsConfig = require("Config/BindingsConfig")
 local Registry = require("UI/Registry/OptionRegistry")
+local Weapons = require("Features/Weapons")
 
 local s_Toggles = nil
 
@@ -11,7 +12,7 @@ local function GetToggles()
 
     s_Toggles = {}
     for _, entry in ipairs(Registry.GetAll()) do
-        if entry.Kind == Registry.Kind.Toggle then
+        if Registry.IsHotkeyable(entry) then
             Bindings.EnsureAction(Registry.GetHotkeyAction(entry))
             table.insert(s_Toggles, entry)
         end
@@ -28,8 +29,12 @@ end
 
 local function HotkeysView()
     local toggles = GetToggles()
-    Buttons.OptionExtended("Registered Toggles", "", tostring(#toggles), "Every toggle below can use a keyboard or controller binding.")
+    Buttons.OptionExtended("Bindable Options", "", tostring(#toggles), "Every toggle below can use a keyboard or controller binding. Press Delete (or View on controller) while binding to clear just that one.")
     Buttons.Option("Clear All Toggle Hotkeys", "Remove every optional toggle binding.", ClearAll)
+
+    Buttons.Break("Ability Keys")
+    Buttons.Bind("Blackwall", Weapons.BlackwallForce.Action, "Blackwalls the NPC you're looking at. Default: B.")
+    Buttons.Bind("Nitrous Boost", "NITRO", "Held to fire the nitrous boost.")
 
     local category = nil
     for _, entry in ipairs(toggles) do
@@ -41,4 +46,4 @@ local function HotkeysView()
     end
 end
 
-return Submenu.Create("Toggle Hotkeys", HotkeysView)
+return Submenu.Create("Hotkeys", HotkeysView)

@@ -12,6 +12,7 @@ return {
     HeaderHeight = 34,
     FooterHeight = 30,
     SurfaceWidth = 250,
+    MenuMargin = 12,
     MaxVisibleItems = 6,
     IconSize = 6,
 }

@@ -101,6 +101,13 @@ local function GetRarity(id, record)
         or (quality ~= "" and quality or "Standard")
 end
 
+local EVOLUTION_NAMES = { Power = "Power", Smart = "Smart", Tech = "Tech", Blade = "Blade", Blunt = "Blunt" }
+
+local function GetEvolution(record)
+    local evolution = DataUtils.SafeCall(function() return record:Evolution():Type().value end)
+    return evolution and EVOLUTION_NAMES[evolution] or nil
+end
+
 local function BuildWeapon(id, record)
     local tags = DataUtils.GetTags(record)
     return {
@@ -118,6 +125,7 @@ local function BuildWeapon(id, record)
         isSmart = DataUtils.HasTag(tags, "smartweapon"),
         isPower = DataUtils.HasTag(tags, "powerweapon"),
         onWall = WALL_WEAPONS[id] == true,
+        evolution = GetEvolution(record),
         tags = tags
     }
 end
@@ -144,6 +152,16 @@ function WeaponLoader:LoadAll()
     end
 
     Logger.Log(string.format("WeaponLoader: loaded %d weapons", #self.weapons))
+end
+
+function WeaponLoader:GetDescription(weapon)
+    if weapon.description ~= nil then return weapon.description end
+
+    local record = TweakDB:GetRecord(weapon.id)
+    local key = record and DataUtils.SafeCall(function() return record:LocalizedDescription() end)
+    local text = key and DataUtils.GetLocalizedSafe(key) or ""
+    weapon.description = (text:gsub("<.->", ""))
+    return weapon.description
 end
 
 function WeaponLoader:GetAll()

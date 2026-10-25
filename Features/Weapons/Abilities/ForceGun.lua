@@ -21,7 +21,8 @@ function ForceGun.Tick()
     if not player or not targeting then return end
 
     if player.isAiming and not s_Target then
-        s_Target = targeting:GetLookAtObject(player, true, false)
+        local target = targeting:GetLookAtObject(player, true, false)
+        if target and not AimHelpers.IsPlayerOrMount(target) then s_Target = target end
     end
 
     if not s_Target or not Weapon.IsPlayerShooting() then return end

@@ -14,6 +14,7 @@ local KIND = {
 
 local function Define(name, kind, modifiers)
     local definition = { Name = "Weapon." .. name, Kind = kind, Modifiers = modifiers, Enabled = { value = false } }
+    definition.Left = { Name = definition.Name .. ".Left" }
     WeaponModifiers[name] = definition
     return definition
 end
@@ -97,33 +98,43 @@ local function DesiredKey(definition, itemKey)
     return itemKey
 end
 
+local function DesiredLeftKey(definition, itemKey)
+    if not definition.Enabled.value or not itemKey or definition.Kind == KIND.Melee then return nil end
+    if not Weapon.IsLeftRangedEquipped() then return nil end
+    return itemKey
+end
+
+local function SyncHand(owner, desired, getItem, modifiers)
+    if desired == StatModifiers.GetKey(owner) then return false end
+
+    if desired then
+        local _, itemData = getItem()
+        local statsID = itemData and itemData:GetStatsObjectID() or nil
+        if statsID then StatModifiers.Add(owner, statsID, desired, modifiers) end
+    else
+        StatModifiers.Remove(owner)
+    end
+    return true
+end
+
 local function BuildModifiers(definition)
     return definition.Modifiers
 end
 
 function WeaponModifiers.IsActive()
     for _, definition in ipairs(WeaponModifiers.Definitions) do
-        if definition.Enabled.value or StatModifiers.IsApplied(definition) then return true end
+        if definition.Enabled.value or StatModifiers.IsApplied(definition) or StatModifiers.IsApplied(definition.Left) then return true end
     end
     return false
 end
 
 function WeaponModifiers.Tick()
     local itemKey = Weapon.GetCurrentItemKey()
+    local leftKey = Weapon.GetLeftItemKey()
 
     for _, definition in ipairs(WeaponModifiers.Definitions) do
-        local desired = DesiredKey(definition, itemKey)
-        if desired ~= StatModifiers.GetKey(definition) then
-            if desired then
-                local _, itemData = Weapon.GetEquippedRightHand()
-                local statsID = itemData and itemData:GetStatsObjectID() or nil
-                if not statsID then return end
-                StatModifiers.Add(definition, statsID, desired, BuildModifiers(definition))
-            else
-                StatModifiers.Remove(definition)
-            end
-            return
-        end
+        if SyncHand(definition, DesiredKey(definition, itemKey), Weapon.GetEquippedRightHand, BuildModifiers(definition)) then return end
+        if SyncHand(definition.Left, DesiredLeftKey(definition, leftKey), Weapon.GetEquippedLeftHand, BuildModifiers(definition)) then return end
     end
 end
 

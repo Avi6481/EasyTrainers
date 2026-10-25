@@ -24,7 +24,10 @@ function GravityGun.Tick()
         return
     end
 
-    s_Held = s_Held or targeting:GetLookAtObject(player, true, false)
+    if not s_Held then
+        local target = targeting:GetLookAtObject(player, true, false)
+        if target and not AimHelpers.IsPlayerOrMount(target) then s_Held = target end
+    end
     if not s_Held then return end
 
     local direction, origin = AimHelpers.GetAimDirection(player, targeting)

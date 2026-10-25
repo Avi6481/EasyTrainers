@@ -28,9 +28,9 @@ function VehicleUnlocking.SetPlayerVehicleState(vehicleID, enable)
     local vehicleSystem = Game.GetVehicleSystem()
     if not vehicleSystem then return false end
 
-    local recordID = type(vehicleID) == "string" and TweakDBID.new(vehicleID) or vehicleID
-    local result = vehicleSystem:EnablePlayerVehicle(recordID, enable, not enable)
-    Logger.Log(string.format("VehicleUnlocking: %s %s", enable and "unlocked" or "locked", tostring(vehicleID)))
+    local recordName = type(vehicleID) == "string" and vehicleID or TDBID.ToStringDEBUG(vehicleID)
+    local result = vehicleSystem:EnablePlayerVehicle(recordName, enable, not enable)
+    Logger.Log(string.format("VehicleUnlocking: %s %s (%s)", enable and "unlock" or "lock", recordName, tostring(result)))
     return result
 end
 

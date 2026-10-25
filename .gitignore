@@ -14,3 +14,5 @@ Config/JSON/navigation.json
 Config/JSON/ui.json
 Config/JSON/bindings.json
 EasyTrainer.log
+REDmodLog.txt
+CHANGELOG-2.3.md

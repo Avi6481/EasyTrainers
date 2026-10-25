@@ -26,10 +26,12 @@ local WeaponLoader = require("Utils/DataExtractors/WeaponLoader")
 local PerkLoader = require("Utils/DataExtractors/PerkLoader")
 local GeneralLoader = require("Utils/DataExtractors/GeneralLoader")
 local TeleportLocations = require("Features/Teleports/TeleportLocations")
+local DualWieldAnything = require("Features/Weapons/Abilities/DualWieldAnything")
+local Mouse = require("Core/Mouse")
 
 local s_Modules = nil
 local s_DeltaTime = 1 / 60
-local s_Session = { isLoaded = false, isPaused = false, isDead = false }
+local s_Session = { isLoaded = false, isPaused = false, isBlurred = false, isDead = false }
 
 registerForEvent("onOverlayOpen", function() State.OverlayOpen = true end)
 registerForEvent("onOverlayClose", function() State.OverlayOpen = false end)
@@ -61,22 +63,24 @@ local function LoadModules()
 end
 
 local function EndSession()
+    if s_Modules then s_Modules.Weapon.ResetInput() end
     Lifecycle.SessionEnd()
     StatusEffect.Forget()
     StatModifiers.Forget()
     Logger.Log("Session ended, trainer state forgotten")
 end
 
-local function OnSessionEvent(state)
-    s_Session = state
-    if state.event == "Start" then LoadModules() end
-    if state.event == "End" then EndSession() end
-end
-
 local function UpdateSessionState()
     s_Session.isLoaded = Session.IsLoaded()
     s_Session.isPaused = Session.IsPaused()
+    s_Session.isBlurred = Session.IsBlurred()
     s_Session.isDead = Session.IsDead()
+end
+
+local function OnSessionEvent(state)
+    UpdateSessionState()
+    if state.event == "Start" then LoadModules() end
+    if state.event == "End" then EndSession() end
 end
 
 local function LoadLanguage()
@@ -114,6 +118,14 @@ local function RegisterHooks()
         if s_Modules then s_Modules.WeaponTick.HandleProjectileHit(projectile, eventData) end
     end)
 
+    Event.Observe("ShootEvents", "OnEnter", function()
+        if s_Modules then s_Modules.WeaponTick.HandleShot() end
+    end)
+
+    Event.Observe("ScriptedPuppet", "OnHit", function(_, hitEvent)
+        if s_Modules then s_Modules.WeaponTick.HandleHit(hitEvent) end
+    end)
+
     Event.ObserveAfter("LocomotionAirEvents", "OnEnter", function(self, context, result)
         if s_Modules then s_Modules.Self.GodMode.DisableFallFX(self, context, result) end
     end)
@@ -122,9 +134,23 @@ local function RegisterHooks()
         if s_Modules then s_Modules.Vehicles.FreezeQuestTimer.HandleCountdownTimer() end
     end)
 
+    Event.ObserveAfter("hudCarController", "OnCameraModeChanged", function(controller)
+        if s_Modules then s_Modules.Vehicles.VehicleSpeedometer.OnHudCameraChanged(controller) end
+    end)
+
     Event.Override("LocomotionTransition", "WantsToDodge", function(transition, stateContext, scriptInterface, wrappedFunc)
         if not s_Modules then return wrappedFunc(stateContext, scriptInterface) end
         return s_Modules.Self.InfiniteAirDash.HandleAirDash(transition, stateContext, scriptInterface, wrappedFunc)
+    end)
+
+    Event.Override("gameItemData", "CanDualWield", function(itemData, owner, wrappedMethod)
+        if DualWieldAnything.CanDualWield(itemData) then return true end
+        return wrappedMethod(owner)
+    end)
+
+    Event.Override("InventoryDataManagerV2", "HasPlayerDualWield", function(_, wrappedMethod)
+        if DualWieldAnything.HasPlayerDualWield() then return true end
+        return wrappedMethod()
     end)
 
     Event.Override("scannerDetailsGameController", "ShouldDisplayTwintoneTab", function(this, wrappedMethod)
@@ -144,7 +170,7 @@ Event.RegisterInit(function()
     SaveGuard.Initialize()
 
     Session.Listen(OnSessionEvent)
-    Cron.After(0.1, function() s_Session = Session.GetState() end)
+    Cron.After(0.1, UpdateSessionState)
     Cron.Every(1.0, UpdateSessionState)
     Cron.Every(0.5, LoadModules)
 
@@ -174,10 +200,11 @@ Event.RegisterUpdate(function(deltaTime)
 end)
 
 Event.RegisterDraw(function()
+    Mouse.Update()
     Notification.Render()
     if not s_Modules then return end
 
-    s_Modules.Vehicles.VehicleSpeedometer.Render()
+    s_Modules.Vehicles.VehicleSpeedometer.Render(s_Session.isPaused or s_Session.isBlurred or not s_Session.isLoaded)
     s_Modules.MainMenu.Initialize()
     Handler.Update()
     s_Modules.MainMenu.Render(s_DeltaTime)

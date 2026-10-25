@@ -38,7 +38,8 @@ Bindings.DefaultActions = {
     NOCLIP_BACKWARD = { keys = { Input.VK.S }, btns = {} },
     NOCLIP_LEFT = { keys = { Input.VK.A }, btns = {} },
     NOCLIP_RIGHT = { keys = { Input.VK.D }, btns = {} },
-    NITRO = { keys = { Input.VK.SHIFT }, btns = { Input.GP.X } }
+    NITRO = { keys = { Input.VK.SHIFT }, btns = { Input.GP.X } },
+    BLACKWALL_FORCE = { keys = { Input.VK.B }, btns = {} }
 }
 
 Bindings.Actions = {}
@@ -73,6 +74,12 @@ function Bindings.Rebind(action, binding)
     if binding.keys then current.keys = Normalize(binding.keys) end
     if binding.btns then current.btns = Normalize(binding.btns) end
     return true
+end
+
+function Bindings.Clear(action, clearKeys, clearButtons)
+    local current = Bindings.EnsureAction(action)
+    if clearKeys then current.keys = {} end
+    if clearButtons then current.btns = {} end
 end
 
 function Bindings.ResetAction(action)

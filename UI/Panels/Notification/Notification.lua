@@ -115,6 +115,11 @@ local function GetPosition(position, width, height, offset, slide)
 end
 
 function Notification.Render()
+    if #Notification.Queue == 0 then
+        Notification.LastRenderAt = nil
+        return
+    end
+
     local now, width = os.clock(), 320
     local dt = Notification.LastRenderAt and math.min(0.1, now - Notification.LastRenderAt) or (1 / 60)
     Notification.LastRenderAt = now
@@ -145,6 +150,7 @@ function Notification.Render()
             ImGui.PushStyleColor(ImGuiCol.WindowBg, 0, 0, 0, 0)
             ImGui.Begin("##EasyTrainerNotification" .. entry.Id, ImGuiWindowFlags.NoDecoration
                 + ImGuiWindowFlags.NoInputs + ImGuiWindowFlags.NoSavedSettings)
+            Layout.ApplyFontScale()
             local drawList = ImGui.GetWindowDrawList()
             Draw.RectFilled(drawList, x + 2, y + 2, width - 4, height - 4,
                 Animation.WithAlpha(Style.Shadow, entry.Alpha), Layout.Rounding)

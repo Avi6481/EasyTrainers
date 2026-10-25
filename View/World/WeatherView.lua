@@ -30,10 +30,34 @@ local function CurrentIndex(current)
     return 1
 end
 
+local function Pretty(state)
+    return (state:gsub("^24h_weather_", ""):gsub("_", " "):gsub("(%a)(%w*)", function(first, rest) return first:upper() .. rest end))
+end
+
+local function AllStatesView()
+    local states = WorldWeather.GetAllStates()
+    if #states == 0 then
+        Buttons.Option("No Weather States Found", "The EasyTrainerUtility plugin could not read the weather list in this session.", function() end)
+        return
+    end
+
+    local current = WorldWeather.GetCurrentWeather()
+    for _, state in ipairs(states) do
+        Buttons.OptionExtended(Pretty(state), "", state == current and "ACTIVE" or "", "Switch to the " .. state .. " weather state.", function()
+            WorldWeather.SetWeather(state, s_Transition.value)
+        end)
+    end
+end
+
+local AllStatesMenu = Submenu.Create("All Weather States", AllStatesView)
+
 local function WeatherView()
     local current = WorldWeather.GetCurrentWeather()
     s_Selected.index = CurrentIndex(current)
 
+    Buttons.Submenu("All Weather States", AllStatesMenu, "Every weather state the game has, including quest-only ones.")
+
+    Buttons.Break("")
     Buttons.OptionExtended(L("worldweather.current.label"), "", current, L("worldweather.current.tip"))
     Buttons.Toggle(L("worldweather.freeze.label"), WorldWeather.Freeze, L("worldweather.freeze.tip"))
     Buttons.Option(L("worldweather.random.label"), L("worldweather.random.tip"), WorldWeather.SetRandomWeather)

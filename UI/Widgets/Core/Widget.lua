@@ -5,6 +5,7 @@ local Layout = require("UI/Style/Layout")
 local Navigation = require("UI/Navigation/Navigation")
 local Highlight = require("UI/Widgets/Core/Highlight")
 local Tip = require("UI/Panels/Tip/Tip")
+local Mouse = require("Core/Mouse")
 
 function Widget.Begin(selectable)
     local index = Navigation.Next()
@@ -40,10 +41,10 @@ function Widget.Interact(data)
         return false, false
     end
 
-    local mouseX, mouseY = ImGui.GetMousePos()
+    local mouseX, mouseY = Mouse.GetPosition()
     local hovered = mouseX >= data.X and mouseX <= data.X + data.Width
         and mouseY >= data.Y and mouseY <= data.Y + data.Height
-    local clicked = hovered and ImGui.IsMouseClicked(0)
+    local clicked = hovered and Mouse.IsClicked()
 
     data.Hovered = hovered
     if clicked and data.Selectable then

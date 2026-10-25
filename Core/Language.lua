@@ -128,8 +128,24 @@ function Language.Tip(key, placeholders)
     return text
 end
 
+local EXTRA_KEY_NAMES = {
+    [0x04] = "Mouse 3", [0x05] = "Mouse 4", [0x06] = "Mouse 5",
+    [0x13] = "Pause", [0x14] = "CapsLock", [0x2C] = "Print Screen", [0x90] = "Num Lock", [0x91] = "Scroll Lock",
+    [0x6A] = "Num *", [0x6B] = "Num +", [0x6D] = "Num -", [0x6E] = "Num .", [0x6F] = "Num /",
+    [0xBA] = ";", [0xBB] = "=", [0xBC] = ",", [0xBD] = "-", [0xBE] = ".", [0xBF] = "/", [0xC0] = "`",
+    [0xDB] = "[", [0xDC] = "\\", [0xDD] = "]", [0xDE] = "'"
+}
+
+local function FallbackKeyName(code)
+    code = tonumber(code)
+    if not code then return nil end
+    if code >= 0x70 and code <= 0x87 then return "F" .. tostring(code - 0x6F) end
+    if code >= 0x60 and code <= 0x69 then return "Num " .. tostring(code - 0x60) end
+    return EXTRA_KEY_NAMES[code]
+end
+
 function Language.GetInputKey(code)
-    return LookupSection("inputkeys", code) or tostring(code)
+    return LookupSection("inputkeys", code) or FallbackKeyName(code) or tostring(code)
 end
 
 function Language.GetInputButton(code)

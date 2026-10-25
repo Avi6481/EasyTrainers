@@ -3,7 +3,7 @@ local Bindings = require("Controls/Bindings")
 
 local VehicleNitro = {}
 
-VehicleNitro.Multiplier = { value = 1.5, min = 1.0, max = 100.0, step = 0.5, enabled = false }
+VehicleNitro.Multiplier = { value = 1.5, min = 1.0, max = 100.0, step = 0.5, unit = "x", enabled = false }
 
 local BASE_FORCE = 50000.0
 local IMPULSE_STEP = 0.05

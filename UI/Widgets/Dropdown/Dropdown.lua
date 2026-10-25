@@ -1,4 +1,5 @@
 local Surface = require("UI/Widgets/Surface/Surface")
+local Icons = require("UI/Style/Icons")
 local Animation = require("UI/Widgets/Animation/Animation")
 local Context = require("UI/Core/Context")
 local Draw = require("UI/Core/Draw")
@@ -10,6 +11,7 @@ local Widget = require("UI/Widgets/Core/Widget")
 local DropdownStyle = require("UI/Widgets/Dropdown/DropdownStyle")
 local DropdownNavigation = require("UI/Widgets/Dropdown/DropdownNavigation")
 local SurfaceStyle = require("UI/Widgets/Surface/SurfaceStyle")
+local Mouse = require("Core/Mouse")
 
 local Dropdown = {}
 
@@ -96,9 +98,9 @@ end
 
 local function MouseInteraction(x, y, width, height)
     if not Navigation.State.MouseEnabled then return false, false end
-    local mouseX, mouseY = ImGui.GetMousePos()
+    local mouseX, mouseY = Mouse.GetPosition()
     local hovered = mouseX >= x and mouseX <= x + width and mouseY >= y and mouseY <= y + height
-    return hovered, hovered and ImGui.IsMouseClicked(0)
+    return hovered, hovered and Mouse.IsClicked()
 end
 
 function Dropdown.Option(id, label, valueRef, items, tip, onChange)
@@ -117,7 +119,7 @@ function Dropdown.Option(id, label, valueRef, items, tip, onChange)
     local index = math.max(1, math.min(valueRef.index or 1, math.max(1, #items)))
     local current = Draw.FitText(DisplayText(items[index]), data.Width * 0.45)
     local currentWidth = ImGui.CalcTextSize(current)
-    local arrow = Dropdown.Opened and Dropdown.OwnerId == id and "v" or ">"
+    local arrow = Dropdown.Opened and Dropdown.OwnerId == id and Icons.Expanded or Icons.Collapsed
     local arrowWidth = ImGui.CalcTextSize(arrow)
     Draw.Text(drawList, data.X + 8, textY, Style.Text,
         Draw.FitText(label, data.Width - currentWidth - arrowWidth - 42))
@@ -139,12 +141,14 @@ function Dropdown.Draw()
     local listHeight = visibleCount * DropdownStyle.OptionHeight
     local height = DropdownStyle.HeaderHeight + listHeight + DropdownStyle.FooterHeight
         + (SurfaceStyle.Padding * 2)
-    if not Surface.Begin(Dropdown.Surface, DropdownStyle.SurfaceWidth, height) then return end
+    local surfaceWidth = math.max(DropdownStyle.SurfaceWidth, Context.Bounds.Width - (DropdownStyle.MenuMargin * 2))
+    surfaceWidth = math.min(surfaceWidth, Context.Bounds.Width)
+    if not Surface.Begin(Dropdown.Surface, surfaceWidth, height) then return end
 
     local drawList = ImGui.GetWindowDrawList()
     local x = Dropdown.Surface.X + SurfaceStyle.Padding
     local y = Dropdown.Surface.Y + SurfaceStyle.Padding
-    local width = DropdownStyle.SurfaceWidth - (SurfaceStyle.Padding * 2)
+    local width = surfaceWidth - (SurfaceStyle.Padding * 2)
 
     local headerLabel = Draw.FitText(Dropdown.Label, width * 0.4)
     local selectedText = Draw.FitText(DisplayText(Dropdown.Items[Dropdown.Current]), width * 0.52)
@@ -188,7 +192,7 @@ function Dropdown.Draw()
             Draw.Text(drawList, x + 8, textY, Style.Text,
                 Draw.FitText(DisplayText(item), rowWidth - 34))
             if Dropdown.Value and Dropdown.Value.index == index then
-                Draw.Text(drawList, x + rowWidth - 16, textY, Style.Accent, "*")
+                Draw.Text(drawList, x + rowWidth - 8 - ImGui.CalcTextSize(Icons.Selected), textY, Style.Accent, Icons.Selected)
             end
 
             if clicked then Dropdown.Select(index) end

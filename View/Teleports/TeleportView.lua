@@ -6,6 +6,8 @@ local TeleportLocations = require("Features/Teleports/TeleportLocations")
 local AutoTeleport = require("Features/Teleports/AutoTeleport")
 local Settings = require("Features/Teleports/TeleportViewStates")
 local CustomTeleportView = require("View/Teleports/CustomTeleportView")
+local TeleportMap = require("UI/Panels/Map/TeleportMap")
+local Restrictions = require("Controls/Restrictions")
 
 local s_Creator = { index = 1 }
 local s_Parent = { index = 1 }
@@ -23,6 +25,7 @@ local s_FilterKey = nil
 local s_Categories = {}
 local s_CategoryCounts = {}
 local s_CurrentCategory = ""
+local s_MapCategory = nil
 
 local function AllCreators() return L("teleport.creator_all") end
 local function AllDistricts() return L("teleport.district_all") end
@@ -112,17 +115,29 @@ local function Matches(location)
     return true
 end
 
+local function FilterCaption()
+    local parent = s_Parents[s_Parent.index or 1]
+    local child = s_Children[s_Child.index or 1]
+    if child and child ~= AllAreas() then return child .. ", " .. tostring(parent) end
+    if parent and parent ~= AllDistricts() then return parent end
+    return "Night City"
+end
+
 local function RefreshCategories()
     local key = table.concat({ s_Creator.index, s_Parent.index, s_Child.index, s_KnownCount }, "|")
-    if key == s_FilterKey then return end
+    if key == s_FilterKey and s_MapCategory == nil then return end
     s_FilterKey = key
 
     s_CategoryCounts = {}
+    local matches = {}
     for _, location in ipairs(TeleportLocations.GetAll()) do
         if Matches(location) then
             s_CategoryCounts[location.category] = (s_CategoryCounts[location.category] or 0) + 1
+            table.insert(matches, location)
         end
     end
+    TeleportMap.SetPoints(matches, FilterCaption())
+    s_MapCategory = nil
 
     local isPriority = {}
     for _, category in ipairs(TeleportLocations.GetPriority()) do isPriority[category] = true end
@@ -169,10 +184,13 @@ local function DoQuickTeleport(option)
 end
 
 local function CategoryView()
+    local refreshMap = s_MapCategory ~= s_CurrentCategory
+    local points = refreshMap and {} or nil
     for _, location in ipairs(TeleportLocations.GetAll()) do
         if location.category == s_CurrentCategory and Matches(location) then
+            if points then table.insert(points, location) end
             local distance = Settings.ShowCategoryDistance.value and FormatDistance(Teleport.DistanceFromPlayer(location.position)) or ""
-            Buttons.OptionExtended(location.name, "", distance ~= "" and distance or IconGlyphs.MapMarker, tip("teleport.teleportoption.tip", {
+            local _, data = Buttons.OptionExtended(location.name, "", distance ~= "" and distance or IconGlyphs.MapMarker, tip("teleport.teleportoption.tip", {
                 creator = location.creator,
                 category = location.category,
                 district_parent = location.parentDistrict or "?",
@@ -181,8 +199,14 @@ local function CategoryView()
             }), function()
                 Teleport.TeleportEntity(Game.GetPlayer(), location.position)
             end)
+            if data and data.Visible and (data.Selected or data.Hovered) then TeleportMap.Focus(location.position, location.name) end
         end
     end
+    if points then
+        s_MapCategory = s_CurrentCategory
+        TeleportMap.SetPoints(points, s_CurrentCategory .. "  /  " .. FilterCaption())
+    end
+    if Settings.ShowMap.value then TeleportMap.Submit() end
 end
 
 local CategoryMenu = Submenu.Create("teleport.selectedteleports.label", CategoryView)
@@ -192,8 +216,14 @@ local function ReloadTeleports()
     RebuildViewData()
 end
 
+local function ClearRestrictions()
+    local removed = Restrictions.RemoveStale() or 0
+    Notification.Info(tip("teleport.clearrestrictions.done", { count = tostring(removed) }))
+end
+
 local function SettingsView()
     Buttons.Option(L("teleport.reloadteleports.label"), L("teleport.reloadteleports.tip"), ReloadTeleports)
+    Buttons.Option(L("teleport.clearrestrictions.label"), L("teleport.clearrestrictions.tip"), ClearRestrictions)
 
     Buttons.Break(L("teleport.autoteleports.label"))
     Buttons.Toggle(L("teleport.autowaypoint.label"), AutoTeleport.Waypoint, L("teleport.autowaypoint.tip"))
@@ -206,6 +236,7 @@ local function SettingsView()
     Buttons.Toggle(L("teleport.showcategorydistance.label"), Settings.ShowCategoryDistance, L("teleport.showcategorydistance.tip"))
     Buttons.Toggle(L("teleport.showdistrictfilter.label"), Settings.ShowDistrictFilter, L("teleport.showdistrictfilter.tip"))
     Buttons.Toggle(L("teleport.showcreatorfilter.label"), Settings.ShowCreatorFilter, L("teleport.showcreatorfilter.tip"))
+    Buttons.Toggle(L("teleport.showmap.label"), Settings.ShowMap, L("teleport.showmap.tip"))
 end
 
 local SettingsMenu = Submenu.Create("teleport.settingssubmenu.label", SettingsView)
@@ -223,23 +254,19 @@ local function DrawQuickCycler()
     end
 end
 
-local function FiltersView()
-    if Settings.ShowDistrictFilter.value then
-        if Buttons.StringCycler(L("teleport.district.label"), s_Parent, s_Parents, L("teleport.district.tip")) then BuildChildren() end
-        Buttons.StringCycler(L("teleport.area.label"), s_Child, s_Children, L("teleport.area.tip"))
-    end
-    if Settings.ShowCreatorFilter.value then
-        Buttons.Dropdown(L("teleport.creator.label"), s_Creator, s_Creators, L("teleport.creator.tip"))
-    end
-end
-
-local FiltersMenu = Submenu.Create("teleport.filters.label", FiltersView)
-
 local function LocationsView()
     if Settings.ShowCreatorFilter.value or Settings.ShowDistrictFilter.value then
-        Buttons.Submenu(L("teleport.filters.label"), FiltersMenu, L("teleport.filters.tip"))
+        Buttons.Break(L("teleport.filters.label"))
+        if Settings.ShowDistrictFilter.value then
+            if Buttons.StringCycler(L("teleport.district.label"), s_Parent, s_Parents, L("teleport.district.tip")) then BuildChildren() end
+            Buttons.StringCycler(L("teleport.area.label"), s_Child, s_Children, L("teleport.area.tip"))
+        end
+        if Settings.ShowCreatorFilter.value then
+            Buttons.Dropdown(L("teleport.creator.label"), s_Creator, s_Creators, L("teleport.creator.tip"))
+        end
     end
 
+    Buttons.Break()
     RefreshCategories()
     if #s_Categories == 0 then
         Buttons.Option(L("teleport.selectedteleports.label"), "", function() end)
@@ -248,27 +275,26 @@ local function LocationsView()
         Buttons.Submenu(category .. "  [" .. tostring(s_CategoryCounts[category]) .. "]", CategoryMenu,
             tip("teleport.categorysubmenu.tip", { category = category }), function() s_CurrentCategory = category end)
     end
+    if Settings.ShowMap.value then TeleportMap.Submit() end
 end
-
-local LocationsMenu = Submenu.Create("teleport.categoriesbreak.label", LocationsView)
 
 local function TeleportView()
     if s_KnownCount ~= #TeleportLocations.GetAll() then RebuildViewData() end
 
-    Buttons.Submenu(L("teleport.categoriesbreak.label"), LocationsMenu, L("teleport.categoriesbreak.tip"))
     Buttons.Submenu(L("teleport.customteleports.label"), CustomTeleportView, L("teleport.customteleportview.save.tip"))
     Buttons.Submenu(L("teleport.miscsubmenu.label"), SettingsMenu, L("teleport.miscsubmenu.tip"))
+    Buttons.Break("")
     Buttons.Option(L("teleport.questmarker.label"), L("teleport.questmarker.tip"), Teleport.ToQuestMarker)
     Buttons.Option(L("teleport.waypointmarker.label"), L("teleport.waypointmarker.tip"), Teleport.ToWaypoint)
 
     if Settings.ShowForward.value then
         Buttons.Int(L("teleport.forwarddistance.label"), Settings.ForwardDistance, L("teleport.forwarddistance.tip"))
-        Buttons.Option(L("teleport.teleportforward.label"), L("teleport.teleportforward.tip"), function()
-            Teleport.TeleportEntity(Game.GetPlayer(), Teleport.GetForwardOffset(Settings.ForwardDistance.value))
-        end)
+        Buttons.Option(L("teleport.teleportforward.label"), L("teleport.teleportforward.tip"), Settings.TeleportForward)
     end
 
     if Settings.ShowQuick.value then DrawQuickCycler() end
+
+    LocationsView()
 end
 
 return Submenu.Create("teleport.title", TeleportView)

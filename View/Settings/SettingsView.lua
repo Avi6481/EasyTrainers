@@ -15,6 +15,7 @@ local NotificationView = require("View/Settings/NotificationView")
 local TranslationsView = require("View/Settings/TranslationsView")
 local AboutView = require("View/Settings/AboutView")
 local HotkeysView = require("View/Settings/HotkeysView")
+local BlockedControlsView = require("View/Settings/BlockedControlsView")
 
 local function SaveAll()
     UIConfig.Save()
@@ -36,7 +37,8 @@ end
 
 local function SettingsView()
     Buttons.Submenu(L("settingsmenu.navigation.label"), NavigationView, tip("settingsmenu.navigation.tip"))
-    Buttons.Submenu("Toggle Hotkeys", HotkeysView, "Assign keyboard or controller hotkeys to toggles.")
+    Buttons.Submenu("Hotkeys", HotkeysView, "Assign keyboard or controller hotkeys to toggles and one-shot actions like Repair Vehicle or Clear Wanted Level.")
+    Buttons.Submenu("Blocked Controls", BlockedControlsView, "Choose which game controls are blocked while the menu is open, closed, in mouse mode, or typing.")
     Buttons.Submenu(L("settingsmenu.translations.label"), TranslationsView, tip("settingsmenu.translations.tip"))
     Buttons.Submenu("Appearance", AppearanceView, "Layout and colors for the menu.")
     Buttons.Submenu(L("settingsmenu.notifications.label"), NotificationView, tip("settingsmenu.notifications.tip"))

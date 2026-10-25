@@ -15,6 +15,7 @@ local Notification = require("UI/Panels/Notification/Notification")
 local SidePanel = require("UI/Panels/SidePanel/SidePanel")
 local SubmenuBar = require("UI/Panels/SubmenuBar/SubmenuBar")
 local Tip = require("UI/Panels/Tip/Tip")
+local Mouse = require("Core/Mouse")
 
 local Renderer = {}
 
@@ -64,7 +65,9 @@ local function BeginWindow()
 
     ImGui.SetNextWindowSize(Layout.Width, Layout.Height, ImGuiCond.Always)
     ImGui.SetNextWindowPos(Layout.X, Layout.Y, ImGuiCond.Always)
-    return ImGui.Begin("EasyTrainer###EasyTrainerConsolidated", WINDOW_FLAGS)
+    local open = ImGui.Begin("EasyTrainer###EasyTrainerConsolidated", WINDOW_FLAGS)
+    Layout.ApplyFontScale()
+    return open
 end
 
 local function UpdateDragging()
@@ -73,18 +76,18 @@ local function UpdateDragging()
         return
     end
 
-    local mouseX, mouseY = ImGui.GetMousePos()
+    local mouseX, mouseY = Mouse.GetPosition()
     local inHeader = mouseX >= Layout.X and mouseX <= Layout.X + Layout.Width
         and mouseY >= Layout.Y and mouseY <= Layout.Y + Layout.HeaderHeight
 
-    if inHeader and ImGui.IsMouseClicked(0) then
+    if inHeader and Mouse.IsClicked() then
         s_Dragging = true
         s_DragOffsetX = mouseX - Layout.X
         s_DragOffsetY = mouseY - Layout.Y
     end
 
     if not s_Dragging then return end
-    if not ImGui.IsMouseDown(0) then
+    if not Mouse.IsDown() then
         s_Dragging = false
         return
     end

@@ -9,6 +9,9 @@ WeaponFeatures.ForceGun = require("Features/Weapons/Abilities/ForceGun")
 WeaponFeatures.ExplosiveBullets = require("Features/Weapons/Abilities/ExplosiveBullets")
 WeaponFeatures.WeaponActions = require("Features/Weapons/Abilities/WeaponActions")
 WeaponFeatures.ExplosiveKnives = require("Features/Weapons/Abilities/ExplosiveKnives")
+WeaponFeatures.DualWieldAnything = require("Features/Weapons/Abilities/DualWieldAnything")
+WeaponFeatures.BlackwallForce = require("Features/Weapons/Abilities/BlackwallForce")
 WeaponFeatures.StatModifiers = require("Features/Weapons/StatModifiers")
+WeaponFeatures.WeaponTuning = require("Features/Weapons/WeaponTuning")
 
 return WeaponFeatures

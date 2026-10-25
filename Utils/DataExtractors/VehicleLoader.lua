@@ -27,26 +27,44 @@ local FACTION_PATTERNS = {
     { "player", "Player" }
 }
 
-local function HasAny(text, needles)
-    for _, needle in ipairs(needles) do
-        if text:find(needle, 1, true) then return true end
-    end
-    return false
+local function GetTypeName(record)
+    local typeRecord = DataUtils.SafeCall(function() return record:Type() end)
+    return typeRecord and DataUtils.SafeCall(function() return typeRecord:EnumName() end) or nil
 end
 
-local function InferCategory(tags, id, displayName)
+local function InferCategory(record, tags, id, displayName)
     local idLower = (id or ""):lower()
     local all = table.concat(tags or {}, " "):lower() .. " " .. idLower .. " " .. (displayName or ""):lower()
+    local typeName = GetTypeName(record)
 
-    if HasAny(idLower, { "police", "border", "maxtac" }) then return "Police & Emergency" end
-    if HasAny(all, { "motorcycle", "sportbike", "motorbike" }) or idLower:find("_bike", 1, true) then return "Motorcycles" end
-    if HasAny(idLower, { "basilisk", "coach", "missile", "bmf", "panzer" }) then return "Heavy & Special" end
-    if HasAny(idLower, { "caliburn", "aerondight", "outlaw" }) then return "Hypercars" end
-    if HasAny(idLower, { "standard25", "pickup", "columbus", "utility", "truck", "van" }) then return "Utility & Pickups" end
-    if HasAny(idLower, { "alvarado", "cortes", "deleon", "delamain", "thrax" }) then return "Executive" end
-    if HasAny(idLower, { "standard3", "mackinaw", "merrimac", "emperor" }) or HasAny(all, { "offroad", "nomad" }) then return "SUV & Off-Road" end
-    if HasAny(idLower, { "sport1", "sport2" }) or all:match("%f[%a]sport%f[%A]") then return "Sports" end
-    if HasAny(idLower, { "standard1", "standard2", "maimai", "galena", "hella", "supron" }) then return "Economy" end
+    if idLower:find("police") or idLower:find("border") or idLower:find("maxtac") then return "Police & Emergency" end
+    if typeName == "Bike" or all:find("motorcycle", 1, true) or all:find("sportbike", 1, true)
+        or all:find("motorbike", 1, true) or idLower:find("_bike") then
+        return "Motorcycles"
+    end
+    if typeName == "Panzer" or idLower:find("basilisk") or idLower:find("coach") or idLower:find("missile")
+        or idLower:find("bmf") or idLower:find("panzer") then
+        return "Heavy & Special"
+    end
+
+    if idLower:find("caliburn") or idLower:find("aerondight") or idLower:find("outlaw") then return "Hypercars" end
+    if idLower:find("standard25") or idLower:find("pickup") or idLower:find("columbus")
+        or idLower:find("utility") or idLower:find("truck") or idLower:find("van") then
+        return "Utility & Pickups"
+    end
+    if idLower:find("alvarado") or idLower:find("cortes") or idLower:find("deleon")
+        or idLower:find("delamain") or idLower:find("thrax") then
+        return "Executive"
+    end
+    if idLower:find("standard3") or idLower:find("mackinaw") or idLower:find("merrimac")
+        or idLower:find("emperor") or all:find("offroad", 1, true) or all:find("nomad", 1, true) then
+        return "SUV & Off-Road"
+    end
+    if idLower:find("sport1") or idLower:find("sport2") or all:match("%f[%a]sport%f[%A]") then return "Sports" end
+    if idLower:find("standard1") or idLower:find("standard2") or idLower:find("maimai")
+        or idLower:find("galena") or idLower:find("hella") or idLower:find("supron") then
+        return "Economy"
+    end
     if all:match("%f[%a]utility%d*%f[%A]") then return "Utility & Pickups" end
 
     return "Other"
@@ -101,7 +119,7 @@ local function BuildVehicle(id, record, displayName, tags, isModded, variants)
         id = id,
         displayName = displayName,
         manufacturer = GetManufacturer(record),
-        category = InferCategory(tags, id, displayName),
+        category = InferCategory(record, tags, id, displayName),
         faction = InferFaction(record, id),
         tags = tags,
         description = lore.description,

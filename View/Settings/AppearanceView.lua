@@ -8,8 +8,10 @@ local UIConfig = require("Config/UIConfig")
 local PALETTE_NAMES = {
     "Night City Blue", "Samurai Red", "Arasaka Gold", "Neon Violet",
     "Afterlife Teal", "Kiroshi Amber", "NCPD Cobalt", "Lucy",
-    "David Martinez", "Rebecca"
+    "David Martinez", "Rebecca", "King"
 }
+
+local SURFACE_KEYS = { "Background", "BackgroundLight", "BackgroundDark", "TextDisabled", "Border" }
 
 local PALETTES = {
     { Accent = 0xFFA56E3A, AccentHover = 0xFFBE844C, AccentActive = 0xFF9314FF },
@@ -21,7 +23,12 @@ local PALETTES = {
     { Accent = 0xFFFF7943, AccentHover = 0xFFFF9162, AccentActive = 0xFFE25F2D },
     { Accent = 0xFFF0E17E, AccentHover = 0xFFF7EFA2, AccentActive = 0xFFE58BD6 },
     { Accent = 0xFF2DE6DC, AccentHover = 0xFF4AF4EE, AccentActive = 0xFF26BEF2 },
-    { Accent = 0xFFEBC43A, AccentHover = 0xFFF5D85B, AccentActive = 0xFFAB4FEF }
+    { Accent = 0xFFEBC43A, AccentHover = 0xFFF5D85B, AccentActive = 0xFFAB4FEF },
+    {
+        Accent = 0xFF00D4F5, AccentHover = 0xFF40E4FF, AccentActive = 0xFF00AAFF,
+        Background = 0xF5101214, BackgroundLight = 0xF5181B1F, BackgroundDark = 0xFA0A0B0C,
+        TextDisabled = 0xFF6EB4C8, Border = 0xFF1E5F6E
+    }
 }
 
 local LAYOUT_FIELDS = {
@@ -30,10 +37,12 @@ local LAYOUT_FIELDS = {
     { Field = "OptionHeight", Label = "Option Height", Tip = "Height of each option row.", Min = 22, Max = 52, Step = 1 },
     { Field = "Padding", Label = "Outer Padding", Tip = "Padding around menu content.", Min = 2, Max = 30, Step = 1 },
     { Field = "Spacing", Label = "Row Spacing", Tip = "Space between option rows.", Min = 0, Max = 12, Step = 1 },
-    { Field = "Rounding", Label = "Corner Rounding", Tip = "Window and panel corner rounding.", Min = 0, Max = 20, Step = 1 }
+    { Field = "Rounding", Label = "Corner Rounding", Tip = "Window and panel corner rounding.", Min = 0, Max = 20, Step = 1 },
+    { Field = "FontScale", Label = "Text Size", Tip = "Size of the menu text in percent. Only affects EasyTrainer, not the rest of CET.", Min = 60, Max = 140, Step = 5 }
 }
 
 local s_Palette = { index = 1 }
+local s_UseIcons = { value = true }
 local s_LayoutRefs = {}
 
 for _, field in ipairs(LAYOUT_FIELDS) do
@@ -48,6 +57,7 @@ for index, palette in ipairs(PALETTES) do
 end
 
 local function ApplyPalette(index)
+    for _, key in ipairs(SURFACE_KEYS) do Style[key] = Defaults.Colors[key] end
     for key, value in pairs(PALETTES[index] or {}) do Style[key] = value end
 end
 
@@ -62,6 +72,9 @@ local function AppearanceView()
         ref.value = Layout[field.Field]
         Buttons.Int(field.Label, ref, field.Tip, function(value) Layout[field.Field] = value end)
     end
+
+    s_UseIcons.value = Layout.UseIcons ~= false
+    Buttons.GhostToggle("Use Icons", s_UseIcons, "Show icons for arrows and checkmarks instead of plain characters.", function(value) Layout.UseIcons = value end)
 
     Buttons.Break("Colors")
     Buttons.Dropdown("Color Scheme", s_Palette, PALETTE_NAMES, "Choose a Night City accent palette.", ApplyPalette)

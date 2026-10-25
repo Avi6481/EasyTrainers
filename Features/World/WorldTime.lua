@@ -17,6 +17,9 @@ local LAPSE_INTERVAL = 0.1
 local FAST_INTERVAL = 0.1
 local SKIP_INTERVAL = 0.05
 local SOURCE = "EasyTrainerWorldTime"
+local SCENE_TIER_LIMIT = 3
+local TRANSITION_TIME = 2.5
+local TRANSITION_INTERVAL = 0.03
 
 local s_Frozen = nil
 local s_FreezeElapsed = 0
@@ -24,6 +27,7 @@ local s_SyncElapsed = 0
 local s_LapseElapsed = 0
 local s_FastElapsed = 0
 local s_Skip = nil
+local s_Transition = nil
 
 local function GetTimeSystem()
     local ok, system = pcall(Game.GetTimeSystem)
@@ -69,7 +73,10 @@ local function ApplyTime(hours, minutes, seconds, label)
         Notification.Info("System clock sync disabled to apply custom time")
     end
 
-    WorldTime.SetGameTime(hours, minutes, seconds)
+    local from = SecondsOfDay()
+    local target = hours * 3600 + minutes * 60 + seconds
+    if target <= from then target = target + SECONDS_PER_DAY end
+    s_Transition = { From = from, Target = target, Elapsed = 0, Tick = 0 }
 end
 
 function WorldTime.SetExclusiveMode(keep, enabled)
@@ -158,6 +165,25 @@ local function TickSkip(deltaTime)
     WorldTime.SetGameTime(SplitSeconds(s_Skip.Current))
 end
 
+local function Ease(progress)
+    return progress < 0.5 and 2 * progress * progress or 1 - ((-2 * progress + 2) ^ 2) / 2
+end
+
+local function TickTransition(deltaTime)
+    if not s_Transition then return false end
+
+    s_Transition.Elapsed = s_Transition.Elapsed + deltaTime
+    s_Transition.Tick = s_Transition.Tick + deltaTime
+    local progress = math.min(1, s_Transition.Elapsed / TRANSITION_TIME)
+    if progress < 1 and s_Transition.Tick < TRANSITION_INTERVAL then return true end
+    s_Transition.Tick = 0
+
+    local current = s_Transition.From + (s_Transition.Target - s_Transition.From) * Ease(progress)
+    WorldTime.SetGameTime(SplitSeconds(current))
+    if progress >= 1 then s_Transition = nil end
+    return true
+end
+
 local function TickFastTime(deltaTime)
     if not WorldTime.DaySpeed.enabled and not WorldTime.NightSpeed.enabled then return end
 
@@ -184,8 +210,33 @@ local function TickTimeLapse(deltaTime)
     WorldTime.SetGameTime(SplitSeconds(SecondsOfDay() + elapsed * WorldTime.TimeLapseMultiplier.value * 60))
 end
 
+local function IsGameControllingTime()
+    local player = Game.GetPlayer()
+    if not player then return true end
+
+    local blackboard = player:GetPlayerStateMachineBlackboard()
+    if blackboard and blackboard:GetInt(GetAllBlackboardDefs().PlayerStateMachine.HighLevel) >= SCENE_TIER_LIMIT then return true end
+
+    local workspot = Game.GetWorkspotSystem()
+    return workspot ~= nil and workspot:IsActorInWorkspot(player)
+end
+
+local function IsAnyTimeFeatureActive()
+    return WorldTime.FreezeTime.value or WorldTime.SyncToSystemClock.value or WorldTime.TimeLapse.value
+        or WorldTime.DaySpeed.enabled or WorldTime.NightSpeed.enabled or s_Skip ~= nil or s_Transition ~= nil
+end
+
 function WorldTime.Update(deltaTime)
     deltaTime = deltaTime or 0
+    if not IsAnyTimeFeatureActive() then return end
+
+    if IsGameControllingTime() then
+        s_Frozen = nil
+        s_Transition = nil
+        return
+    end
+
+    if TickTransition(deltaTime) then return end
     if TickFreeze(deltaTime) then return end
 
     TickSync(deltaTime)

@@ -2,221 +2,252 @@ local Vehicle = require("Utils/Vehicle")
 local Animation = require("UI/Widgets/Animation/Animation")
 local Draw = require("UI/Core/Draw")
 local Style = require("UI/Style/Style")
+local Navigation = require("UI/Navigation/Navigation")
 local UIConfig = require("Config/UIConfig")
+local Mouse = require("Core/Mouse")
 
 local Speedometer = {
     Enabled = { value = false },
     ShowRPM = { value = true },
     UseMPH = { value = false },
     AutomaticMaxSpeed = { value = false },
-    MaxSpeed = { value = 320, min = 160, max = 500, step = 20 },
-    Scale = { value = 1.0, min = 0.7, max = 1.4, step = 0.05 },
+    HideGameSpeedometer = { value = false },
+    MaxSpeed = { value = 320, min = 160, max = 500, step = 20, unit = "km/h" },
+    Scale = { value = 1.0, min = 0.7, max = 1.4, step = 0.05, unit = "x" },
     Position = { index = 1 },
     Positions = { "Bottom Right", "Bottom Left", "Top Right", "Top Left" },
-    OffsetX = { value = 0, min = -1000, max = 1000, step = 5 },
-    OffsetY = { value = 0, min = -1000, max = 1000, step = 5 },
+    OffsetX = { value = 0, min = -4000, max = 4000, step = 5, unit = "px" },
+    OffsetY = { value = 0, min = -4000, max = 4000, step = 5, unit = "px" },
     Colors = {
         Active = 0xFFA56E3A,
         Needle = 0xFFFFFFFF,
         Text = 0xFFFFFFFF,
         Muted = 0xFFA08C78,
-        Ring = 0xFF6E5A50,
+        Ring = 0xFF6E5A50
     },
-    SpeedKPH = 0,
+    SpeedMPH = 0,
     RPM = 0,
     MaxRPM = 8000,
     DetectedMaxSpeed = nil,
     Gear = "N",
-    Mounted = false,
-    Alpha = 0,
+    Alpha = 0
 }
 
 UIConfig.RegisterSection("Speedometer", {
     MaxSpeed = Speedometer.MaxSpeed,
     AutomaticMaxSpeed = Speedometer.AutomaticMaxSpeed,
     ShowRPM = Speedometer.ShowRPM,
+    HideGameSpeedometer = Speedometer.HideGameSpeedometer,
     Scale = Speedometer.Scale,
     Position = Speedometer.Position,
     OffsetX = Speedometer.OffsetX,
     OffsetY = Speedometer.OffsetY,
-    Colors = Speedometer.Colors,
+    Colors = Speedometer.Colors
 })
 
-local ENGINE_SPEED_TO_KPH = 3.86525568
+local MPH_TO_KPH = 1.61
+local MARGIN = 24
+local BASE_WIDTH = 300
+local BASE_HEIGHT = 220
+local FADE_SPEED = 8
+local NEEDLE_SPEED = 10
+local MOVE_SPEED = 12
+local SPEED_DIVISIONS = 10
+local RPM_DIVISIONS = 5
+local SPEED_STEPS = { 10, 20, 30, 40, 50, 60, 80, 100 }
+local RPM_STEPS = { 1, 2 }
 
-local s_LastPosition = nil
-local s_LastEntity = nil
-local s_Profile = nil
+local s_CurveSet = nil
+local s_CurveName = nil
+local s_VehicleHash = nil
+local s_HudController = nil
+local s_HudHidden = false
+local s_Dragging = false
+local s_DragX = 0
+local s_DragY = 0
+local s_DrawX = nil
+local s_DrawY = nil
+local s_LastRender = nil
 
-local function SafeMethod(object, name)
-    if not object then return nil end
-    local ok, value = pcall(function() return object[name](object) end)
-    return ok and value or nil
-end
-
-local function Number(value)
-    if type(value) == "number" then return value end
-    if type(value) == "table" or type(value) == "userdata" then
-        return tonumber(value.value)
+local function Curves()
+    if not s_CurveSet then
+        s_CurveSet = CName.new("vehicle_ui")
+        s_CurveName = CName.new("speed_to_multiplier")
     end
-    return tonumber(value)
+    return s_CurveSet, s_CurveName
 end
 
-local function EntityKey(vehicle)
-    local id = SafeMethod(vehicle, "GetEntityID")
-    return id and tostring(id) or tostring(vehicle)
+local function RawSpeedToMPH(rawSpeed)
+    rawSpeed = math.abs(rawSpeed or 0)
+    local statsData = Game.GetStatsDataSystem()
+    if not statsData then return rawSpeed end
+
+    local curveSet, curveName = Curves()
+    local multiplier = statsData:GetValueFromCurve(curveSet, rawSpeed, curveName) or 1
+    return rawSpeed * multiplier
 end
 
-local function GetPosition(vehicle)
-    local value = SafeMethod(vehicle, "GetWorldPosition")
-    if value and value.x and value.y and value.z then return value end
-    local transform = SafeMethod(vehicle, "GetWorldTransform")
-    if transform and transform.Position then
-        local position = transform.Position:ToVector4()
-        if position then return position end
-    end
+local function RoundUp(value, step)
+    return math.ceil(value / step) * step
 end
 
-local function GetVelocitySpeed(vehicle)
-    local velocity = SafeMethod(vehicle, "GetVelocity") or SafeMethod(vehicle, "GetLinearVelocity")
-    if not (velocity and velocity.x and velocity.y and velocity.z) then return nil end
-    return math.sqrt((velocity.x * velocity.x) + (velocity.y * velocity.y) + (velocity.z * velocity.z))
-end
-
-local function ReadProfile(vehicle)
-    local record = SafeMethod(vehicle, "GetRecord")
-    if not record then return nil end
-    local engine = SafeMethod(record, "VehEngineData")
-    if not engine then return nil end
-
-    local result = {
-        MinRPM = Number(SafeMethod(engine, "MinRPM")) or 800,
-        MaxRPM = Number(SafeMethod(engine, "MaxRPM")) or 8000,
-        Gears = {},
-    }
-    local count = Number(SafeMethod(engine, "GearsCount")) or 0
-    for index = 0, count - 1 do
-        local gear = SafeMethod(engine, "GearsItem" .. tostring(index))
-        if not gear then
-            local ok, value = pcall(function() return engine:GearsItem(index) end)
-            if ok then gear = value end
-        end
-        if gear then
-            table.insert(result.Gears, {
-                MinSpeed = (Number(SafeMethod(gear, "MinSpeed")) or 0) * ENGINE_SPEED_TO_KPH / 3.6,
-                MaxSpeed = (Number(SafeMethod(gear, "MaxSpeed")) or 0) * ENGINE_SPEED_TO_KPH / 3.6,
-                MinRPM = Number(SafeMethod(gear, "MinEngineRPM")) or result.MinRPM,
-                MaxRPM = Number(SafeMethod(gear, "MaxEngineRPM")) or result.MaxRPM,
-            })
+local function NiceScale(maximum, steps, maxDivisions)
+    local step = steps[#steps]
+    for _, candidate in ipairs(steps) do
+        if math.ceil((maximum / candidate) - 0.001) <= maxDivisions then
+            step = candidate
+            break
         end
     end
-    local maximum = 0
-    for _, gear in ipairs(result.Gears) do maximum = math.max(maximum, gear.MaxSpeed or 0) end
-    if maximum > 0 then
-        result.MaxSpeedKPH = maximum * 3.6
-        result.MaxSpeedKPH = math.max(80, math.min(500, result.MaxSpeedKPH))
-    end
-    return result
+
+    local divisions = math.max(1, math.ceil((maximum / step) - 0.001))
+    return divisions * step, divisions
 end
 
-local function RuntimeValue(vehicle, component, names)
-    for _, name in ipairs(names) do
-        local value = Number(SafeMethod(component, name)) or Number(SafeMethod(vehicle, name))
-        if value ~= nil then return value end
+local function ReadEngine(vehicle)
+    Speedometer.MaxRPM = 8000
+    Speedometer.DetectedMaxSpeed = nil
+
+    local ok, engine = pcall(function() return vehicle:GetRecord():VehEngineData() end)
+    if not ok or not engine then return end
+
+    Speedometer.MaxRPM = math.max(1000, engine:MaxRPM() or 8000)
+
+    local topSpeed = 0
+    for index = 0, (engine:GetGearsCount() or 0) - 1 do
+        local gear = engine:GetGearsItem(index)
+        if gear then topSpeed = math.max(topSpeed, gear:MaxSpeed() or 0) end
+    end
+
+    if topSpeed > 0 then
+        Speedometer.DetectedMaxSpeed = math.max(80, math.min(500, RoundUp(RawSpeedToMPH(topSpeed) * MPH_TO_KPH, 20)))
     end
 end
 
-local function EstimateDrivetrain(speedMPS)
-    if not s_Profile or #s_Profile.Gears < 2 then
-        local gear = speedMPS < 0.5 and 0 or math.min(6, math.max(1, math.floor(speedMPS / 9) + 1))
-        local ratio = math.min(1, (speedMPS % 9) / 9)
-        return gear, 900 + (ratio * 6100)
-    end
-
-    local selected = 2
-    for index = 2, #s_Profile.Gears do
-        local gear = s_Profile.Gears[index]
-        selected = index
-        if speedMPS <= gear.MaxSpeed or index == #s_Profile.Gears then break end
-    end
-    local gear = s_Profile.Gears[selected]
-    local range = math.max(0.01, gear.MaxSpeed - gear.MinSpeed)
-    local ratio = math.max(0, math.min(1, (speedMPS - gear.MinSpeed) / range))
-    return selected - 1, gear.MinRPM + ((gear.MaxRPM - gear.MinRPM) * ratio)
+local function GearLabel(gear, speedMPH)
+    if gear < 0 then return "R" end
+    if gear == 0 then return speedMPH < 1 and "N" or "1" end
+    return tostring(gear)
 end
 
-local function GearLabel(value, speedMPS)
-    if value == nil then return "--" end
-    value = math.floor(value + 0.5)
-    if value < 0 then return "R" end
-    if value == 0 then return speedMPS < 0.5 and "N" or "1" end
-    return tostring(value)
+local function IsThirdPerson()
+    local blackboards = Game.GetBlackboardSystem()
+    local defs = GetAllBlackboardDefs()
+    local activeVehicle = blackboards and blackboards:Get(defs.UI_ActiveVehicleData) or nil
+    return activeVehicle ~= nil and activeVehicle:GetBool(defs.UI_ActiveVehicleData.IsTPPCameraOn)
+end
+
+local function ApplyHudVisibility()
+    if not s_HudController then return end
+
+    local hide = Speedometer.Enabled.value and Speedometer.HideGameSpeedometer.value
+    local ok, root = pcall(function() return s_HudController:GetRootWidget() end)
+    if not ok or not root then
+        s_HudController = nil
+        return
+    end
+
+    if hide then
+        root:SetVisible(false)
+    elseif s_HudHidden then
+        root:SetVisible(IsThirdPerson())
+    end
+    s_HudHidden = hide
+end
+
+function Speedometer.OnHudCameraChanged(controller)
+    s_HudController = controller
+    if Speedometer.Enabled.value and Speedometer.HideGameSpeedometer.value then ApplyHudVisibility() end
+end
+
+local function ResetReadings(deltaTime)
+    Speedometer.SpeedMPH = Animation.Animate(Speedometer.SpeedMPH, 0, FADE_SPEED, deltaTime)
+    Speedometer.RPM = Animation.Animate(Speedometer.RPM, 0, FADE_SPEED, deltaTime)
+    Speedometer.Gear = "N"
+    s_VehicleHash = nil
 end
 
 function Speedometer.Update(deltaTime)
-    if not Speedometer.Enabled.value then
-        s_LastPosition, s_LastEntity, s_Profile = nil, nil, nil
-        Speedometer.Alpha = 0
-        Speedometer.Mounted = false
-        return
-    end
-
     local dt = math.max(0.001, deltaTime or (1 / 60))
-    local vehicle = Vehicle.GetMountedVehicleSafe()
-    Speedometer.Mounted = vehicle ~= nil
-    Speedometer.Alpha = Animation.Animate(Speedometer.Alpha, vehicle and 1 or 0, 8, dt)
-    if not vehicle then
-        s_LastPosition, s_LastEntity, s_Profile = nil, nil, nil
-        Speedometer.SpeedKPH = Animation.Animate(Speedometer.SpeedKPH, 0, 8, dt)
-        Speedometer.RPM = Animation.Animate(Speedometer.RPM, 0, 8, dt)
-        Speedometer.Gear = "N"
+    local wantHudHidden = Speedometer.Enabled.value and Speedometer.HideGameSpeedometer.value
+    if wantHudHidden ~= s_HudHidden then ApplyHudVisibility() end
+
+    if not Speedometer.Enabled.value then
+        Speedometer.Alpha = 0
+        s_VehicleHash = nil
         return
     end
 
-    local entity = EntityKey(vehicle)
-    if entity ~= s_LastEntity then
-        s_LastEntity = entity
-        s_LastPosition = nil
-        s_Profile = ReadProfile(vehicle)
-        Speedometer.DetectedMaxSpeed = s_Profile and s_Profile.MaxSpeedKPH or nil
+    local vehicle = Vehicle.GetMountedVehicleSafe()
+    Speedometer.Alpha = Animation.Animate(Speedometer.Alpha, vehicle and 1 or 0, FADE_SPEED, dt)
+    if not vehicle then
+        ResetReadings(dt)
+        return
     end
 
-    local speedMPS
-    local position = GetPosition(vehicle)
-    if position and s_LastPosition then
-        local dx, dy, dz = position.x - s_LastPosition.x, position.y - s_LastPosition.y, position.z - s_LastPosition.z
-        speedMPS = math.sqrt((dx * dx) + (dy * dy) + (dz * dz)) / dt
-        if speedMPS > 150 then speedMPS = 0 end
-    elseif not position then
-        speedMPS = GetVelocitySpeed(vehicle)
+    local hash = vehicle:GetEntityID().hash
+    if hash ~= s_VehicleHash then
+        s_VehicleHash = hash
+        ReadEngine(vehicle)
     end
-    if position then s_LastPosition = { x = position.x, y = position.y, z = position.z } end
-    speedMPS = math.max(0, speedMPS or 0)
 
-    local component = SafeMethod(vehicle, "GetVehicleComponent")
-    local runtimeGear = RuntimeValue(vehicle, component, { "GetCurrentGear", "GetCurrentGearIndex", "GetGear" })
-    local runtimeRPM = RuntimeValue(vehicle, component, { "GetCurrentRPM", "GetEngineRPM", "GetRPM" })
-    local estimatedGear, estimatedRPM = EstimateDrivetrain(speedMPS)
-    local maxRPM = math.max(1000, s_Profile and s_Profile.MaxRPM or 8000)
-    if runtimeRPM and runtimeRPM <= 1.5 then runtimeRPM = runtimeRPM * maxRPM end
+    local blackboard = vehicle:GetBlackboard()
+    if not blackboard then return end
 
-    Speedometer.SpeedKPH = Animation.Animate(Speedometer.SpeedKPH, speedMPS * 3.6, 10, dt)
-    Speedometer.RPM = Animation.Animate(Speedometer.RPM, runtimeRPM or estimatedRPM, 9, dt)
-    Speedometer.MaxRPM = maxRPM
-    Speedometer.Gear = GearLabel(runtimeGear or estimatedGear, speedMPS)
+    local defs = GetAllBlackboardDefs().Vehicle
+    local speedMPH = RawSpeedToMPH(blackboard:GetFloat(defs.SpeedValue))
+    local rpm = blackboard:GetFloat(defs.RPMValue) or 0
+    local gear = blackboard:GetInt(defs.GearValue) or 0
+
+    Speedometer.SpeedMPH = Animation.Animate(Speedometer.SpeedMPH, speedMPH, NEEDLE_SPEED, dt)
+    Speedometer.RPM = Animation.Animate(Speedometer.RPM, rpm, NEEDLE_SPEED, dt)
+    Speedometer.Gear = GearLabel(gear, speedMPH)
+end
+
+local function BasePosition(width, height)
+    local screenWidth, screenHeight = GetDisplayResolution()
+    local selected = Speedometer.Positions[Speedometer.Position.index or 1]
+    if selected == "Bottom Left" then return MARGIN, screenHeight - height - MARGIN end
+    if selected == "Top Right" then return screenWidth - width - MARGIN, MARGIN end
+    if selected == "Top Left" then return MARGIN, MARGIN end
+    return screenWidth - width - MARGIN, screenHeight - height - MARGIN
 end
 
 local function Position(width, height)
     local screenWidth, screenHeight = GetDisplayResolution()
-    local margin = 24
-    local selected = Speedometer.Positions[Speedometer.Position.index or 1]
-    local x, y = screenWidth - width - margin, screenHeight - height - margin
-    if selected == "Bottom Left" then x, y = margin, screenHeight - height - margin end
-    if selected == "Top Right" then x, y = screenWidth - width - margin, margin end
-    if selected == "Top Left" then x, y = margin, margin end
-    x = x + (Speedometer.OffsetX.value or 0)
-    y = y + (Speedometer.OffsetY.value or 0)
+    local baseX, baseY = BasePosition(width, height)
+    local x = baseX + (Speedometer.OffsetX.value or 0)
+    local y = baseY + (Speedometer.OffsetY.value or 0)
     return math.max(0, math.min(screenWidth - width, x)), math.max(0, math.min(screenHeight - height, y))
+end
+
+local function UpdateDragging(x, y, width, height)
+    if not Navigation.State.MouseEnabled then
+        s_Dragging = false
+        return false
+    end
+
+    local mouseX, mouseY = Mouse.GetPosition()
+    local inside = mouseX >= x and mouseX <= x + width and mouseY >= y and mouseY <= y + height
+
+    if inside and Mouse.IsClicked() then
+        s_Dragging = true
+        s_DragX = mouseX - x
+        s_DragY = mouseY - y
+    end
+
+    if s_Dragging then
+        if Mouse.IsDown() then
+            local baseX, baseY = BasePosition(width, height)
+            Speedometer.OffsetX.value = math.floor(mouseX - s_DragX - baseX)
+            Speedometer.OffsetY.value = math.floor(mouseY - s_DragY - baseY)
+        else
+            s_Dragging = false
+            UIConfig.Save()
+        end
+    end
+
+    return true
 end
 
 local function Polar(centerX, centerY, radius, angle)
@@ -228,8 +259,7 @@ local function TextCentered(drawList, x, y, color, text)
     Draw.Text(drawList, x - (width * 0.5), y, color, text)
 end
 
-local function DrawGauge(drawList, centerX, centerY, radius, ratio, maximum, divisions, label,
-    alpha, scale, centerLabel, centerValue)
+local function DrawGauge(drawList, centerX, centerY, radius, ratio, maximum, divisions, label, alpha, scale, centerLabel, centerValue)
     local startAngle, sweep = math.rad(135), math.rad(270)
     local colors = Speedometer.Colors
     local accent = Animation.WithAlpha(colors.Active, alpha)
@@ -257,51 +287,80 @@ local function DrawGauge(drawList, centerX, centerY, radius, ratio, maximum, div
         local innerX, innerY = Polar(centerX, centerY, radius - (14 * scale), angle)
         Draw.Line(drawList, innerX, innerY, outerX, outerY, text, 2 * scale)
         local labelX, labelY = Polar(centerX, centerY, radius - (28 * scale), angle)
-        TextCentered(drawList, labelX, labelY - (ImGui.GetFontSize() * 0.5), muted,
-            tostring(math.floor((maximum * tickRatio) + 0.5)))
+        TextCentered(drawList, labelX, labelY - (ImGui.GetFontSize() * 0.5), muted, tostring(math.floor((maximum * tickRatio) + 0.5)))
     end
 
-    local needleAngle = startAngle + (sweep * ratio)
-    local needleX, needleY = Polar(centerX, centerY, radius - (19 * scale), needleAngle)
+    local needleX, needleY = Polar(centerX, centerY, radius - (19 * scale), startAngle + (sweep * ratio))
     Draw.Line(drawList, centerX, centerY, needleX, needleY, shadow, 6 * scale)
     Draw.Line(drawList, centerX, centerY, needleX, needleY, needle, 3 * scale)
-    Draw.RectFilled(drawList, centerX - (5 * scale), centerY - (5 * scale), 10 * scale, 10 * scale,
-        text, 5 * scale)
+    Draw.RectFilled(drawList, centerX - (5 * scale), centerY - (5 * scale), 10 * scale, 10 * scale, text, 5 * scale)
 
     if centerLabel then TextCentered(drawList, centerX, centerY + (14 * scale), muted, centerLabel) end
     if centerValue then TextCentered(drawList, centerX, centerY + (30 * scale), accent, centerValue) end
     TextCentered(drawList, centerX, centerY + radius - (6 * scale), muted, label)
 end
 
-function Speedometer.Render()
-    if not Speedometer.Enabled.value or Speedometer.Alpha < 0.01 then return end
+local function DisplayValues()
+    local useMPH = Speedometer.UseMPH.value
+    local maximumKPH = math.max(1, (Speedometer.AutomaticMaxSpeed.value and Speedometer.DetectedMaxSpeed) or Speedometer.MaxSpeed.value)
+    local speed = useMPH and Speedometer.SpeedMPH or Speedometer.SpeedMPH * MPH_TO_KPH
+    local maximum, divisions = NiceScale(useMPH and maximumKPH / MPH_TO_KPH or maximumKPH, SPEED_STEPS, SPEED_DIVISIONS)
+    return speed, maximum, divisions, useMPH and "MPH" or "KM/H"
+end
+
+local function FrameDelta()
+    local now = os.clock()
+    local delta = s_LastRender and (now - s_LastRender) or 0
+    s_LastRender = now
+    return math.max(0, math.min(0.1, delta))
+end
+
+local function SmoothPosition(width, height)
+    local targetX, targetY = Position(width, height)
+    local delta = FrameDelta()
+    if not s_DrawX or s_Dragging then
+        s_DrawX, s_DrawY = targetX, targetY
+    else
+        s_DrawX = Animation.Animate(s_DrawX, targetX, MOVE_SPEED, delta)
+        s_DrawY = Animation.Animate(s_DrawY, targetY, MOVE_SPEED, delta)
+    end
+    return s_DrawX, s_DrawY
+end
+
+function Speedometer.Render(gameMenuOpen)
+    if not Speedometer.Enabled.value or gameMenuOpen or Speedometer.Alpha < 0.01 then
+        s_DrawX, s_LastRender = nil, nil
+        return
+    end
 
     local scale = Speedometer.Scale.value
-    local width, height = 300 * scale, 220 * scale
-    local x, y = Position(width, height)
+    local width, height = BASE_WIDTH * scale, BASE_HEIGHT * scale
+    local x, y = SmoothPosition(width, height)
+    local draggable = UpdateDragging(x, y, width, height)
+    if s_Dragging then x, y = SmoothPosition(width, height) end
+
     ImGui.SetNextWindowPos(x, y, ImGuiCond.Always)
     ImGui.SetNextWindowSize(width, height, ImGuiCond.Always)
     ImGui.PushStyleColor(ImGuiCol.WindowBg, 0, 0, 0, 0)
     ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0)
     ImGui.Begin("##EasyTrainerSpeedometer", ImGuiWindowFlags.NoDecoration + ImGuiWindowFlags.NoSavedSettings
         + ImGuiWindowFlags.NoResize + ImGuiWindowFlags.NoMove + ImGuiWindowFlags.NoScrollbar
-        + ImGuiWindowFlags.NoScrollWithMouse + ImGuiWindowFlags.NoInputs)
+        + ImGuiWindowFlags.NoScrollWithMouse + ImGuiWindowFlags.NoInputs + ImGuiWindowFlags.NoFocusOnAppearing)
 
     local drawList = ImGui.GetWindowDrawList()
     local alpha = Speedometer.Alpha
-    local speedX, speedY = x + (105 * scale), y + (104 * scale)
-    local rpmX, rpmY = x + (243 * scale), y + (151 * scale)
-    local speedRadius, rpmRadius = 88 * scale, 52 * scale
-    local displaySpeed = Speedometer.UseMPH.value and Speedometer.SpeedKPH * 0.621371 or Speedometer.SpeedKPH
-    local configuredMaximum = Speedometer.AutomaticMaxSpeed.value and Speedometer.DetectedMaxSpeed or nil
-    configuredMaximum = math.max(1, configuredMaximum or Speedometer.MaxSpeed.value)
-    local maxSpeed = Speedometer.UseMPH.value and configuredMaximum * 0.621371 or configuredMaximum
-    local rpmMaximum = math.max(1, Speedometer.MaxRPM / 1000)
-    DrawGauge(drawList, speedX, speedY, speedRadius, displaySpeed / maxSpeed, maxSpeed, 8,
-        Speedometer.UseMPH.value and "MPH" or "KM/H", alpha, scale, "GEAR", Speedometer.Gear)
+    local speed, maximum, divisions, unit = DisplayValues()
+
+    if draggable then
+        Draw.Rect(drawList, x, y, width, height, Animation.WithAlpha(Speedometer.Colors.Active, alpha * 0.6), 8 * scale, 1)
+        TextCentered(drawList, x + width * 0.5, y + 4 * scale, Animation.WithAlpha(Speedometer.Colors.Muted, alpha), "Drag to move")
+    end
+
+    DrawGauge(drawList, x + (105 * scale), y + (104 * scale), 88 * scale, speed / maximum, maximum, divisions, unit, alpha, scale, "GEAR", Speedometer.Gear)
     if Speedometer.ShowRPM.value then
-        DrawGauge(drawList, rpmX, rpmY, rpmRadius, Speedometer.RPM / Speedometer.MaxRPM, rpmMaximum, 4,
-            "RPM x1000", alpha, scale)
+        local rpmMaximum, rpmDivisions = NiceScale(math.max(1, Speedometer.MaxRPM / 1000), RPM_STEPS, RPM_DIVISIONS)
+        DrawGauge(drawList, x + (243 * scale), y + (151 * scale), 52 * scale, Speedometer.RPM / (rpmMaximum * 1000),
+            rpmMaximum, rpmDivisions, "RPM x1000", alpha, scale)
     end
 
     ImGui.End()

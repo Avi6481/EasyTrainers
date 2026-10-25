@@ -30,19 +30,51 @@ local s_Locked = nil
 local s_Enforced = false
 local s_NextCheck = 0
 
+local function HasNative()
+    return EasyWeather ~= nil and EasyWeather.SetWeather ~= nil
+end
+
+function WorldWeather.IsAvailable()
+    return HasNative()
+end
+
 function WorldWeather.GetCurrentWeather()
+    if HasNative() then
+        local ok, state = pcall(EasyWeather.GetWeatherState)
+        return ok and state and state.value ~= "" and state.value or "Unknown"
+    end
+
     local system = Game.GetWeatherSystem()
-    local state = system and system:GetWeatherState() or nil
-    return state and tostring(state.name.value) or "Unknown"
+    local ok, state = pcall(function() return system:GetWeatherState() end)
+    return ok and state and tostring(state.name.value) or "Unknown"
 end
 
 function WorldWeather.SetWeather(state, blendSeconds)
-    local system = Game.GetWeatherSystem()
-    if not system then return end
-
     blendSeconds = blendSeconds or 1
-    system:SetWeather(state, blendSeconds, 1)
-    Logger.Log(string.format("WorldWeather: set %s (%ds)", state, blendSeconds))
+    local ok = false
+    if HasNative() then
+        ok = pcall(EasyWeather.SetWeather, CName.new(state), blendSeconds, 1)
+    else
+        ok = pcall(function() Game.GetWeatherSystem():SetWeather(state, blendSeconds, 1) end)
+    end
+    Logger.Log(string.format("WorldWeather: set %s (%ds)%s", state, blendSeconds, ok and "" or " failed, EasyTrainerUtility weather is missing"))
+end
+
+local s_AllStates = nil
+
+function WorldWeather.GetAllStates()
+    if s_AllStates and #s_AllStates > 0 then return s_AllStates end
+    s_AllStates = {}
+    if not HasNative() then return s_AllStates end
+
+    local ok, states = pcall(EasyWeather.GetWeatherStates)
+    if not ok or type(states) ~= "table" then return s_AllStates end
+    for _, state in ipairs(states) do
+        local name = state and state.value or nil
+        if name and name ~= "" then table.insert(s_AllStates, name) end
+    end
+    table.sort(s_AllStates)
+    return s_AllStates
 end
 
 function WorldWeather.SetRandomWeather()
@@ -50,9 +82,11 @@ function WorldWeather.SetRandomWeather()
 end
 
 function WorldWeather.ResetWeather()
-    local system = Game.GetWeatherSystem()
-    if not system then return end
-    system:ResetWeather(true)
+    if HasNative() then
+        pcall(EasyWeather.ResetWeather, true)
+    else
+        pcall(function() Game.GetWeatherSystem():ResetWeather(true) end)
+    end
     Logger.Log("WorldWeather: reset weather")
 end
 

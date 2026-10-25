@@ -49,6 +49,7 @@ end
 
 local function FactView()
     Buttons.Submenu(L("gamefacts.relationshiptracking.label"), RelationshipMenu, "View the current relationship and story progression values.")
+    Buttons.Break("")
     Buttons.Dropdown(L("gamefacts.category.label"), s_Category, s_CategoryLabels, L("gamefacts.category.tip"))
 
     local category = CATEGORIES[s_Category.index or 1]

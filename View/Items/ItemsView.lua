@@ -13,16 +13,18 @@ local function DrawItemControls()
 end
 
 local function SubmitItemInfo(item, section)
+    local description = State.GetDescription(item.id)
     SidePanel.SubmitInfo("essential-item", {
         Eyebrow = "ESSENTIAL ITEM",
         Title = item.name,
+        Icon = item.id,
         Rows = {
             { Label = "Section", Value = section },
             { Label = "Group", Value = item.group or "Other" },
             { Label = "Owned", Value = tostring(State.GetOwned(item.id)) },
             { Label = "Action", Value = State.GetAction() .. " " .. tostring(State.Quantity.value) },
         },
-        Description = item.id,
+        Description = (description ~= "" and (description .. "\n\n") or "") .. item.id,
     }, { Width = 310 })
 end
 

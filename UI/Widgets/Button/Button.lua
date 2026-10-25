@@ -1,17 +1,61 @@
 local Button = {}
 
 local Draw = require("UI/Core/Draw")
+local Icons = require("UI/Style/Icons")
 local Animation = require("UI/Widgets/Animation/Animation")
 local Context = require("UI/Core/Context")
 local Widget = require("UI/Widgets/Core/Widget")
 local ButtonStyle = require("UI/Widgets/Button/ButtonStyle")
 local Style = require("UI/Style/Style")
+local Mouse = require("Core/Mouse")
 
 function Button.Create(label, tip, action)
     return { Kind = "button", Label = label, Tip = tip or "", Action = action }
 end
 
-function Button.Draw(label, tip, rightText, id, valueControl)
+local SLIDER_WIDTH = 170
+local SLIDER_ARROW = 16
+local TRACK_HEIGHT = 2
+local KNOB_SIZE = 8
+
+local function DrawSlider(drawList, data, display, ratio, focus, clicked, textY)
+    local controlWidth = math.min(SLIDER_WIDTH, data.Width * 0.48)
+    local right = data.X + data.Width - ButtonStyle.Padding
+    local left = right - controlWidth
+    local arrowColor = Animation.LerpColor(Style.Border, Style.Accent, focus)
+
+    Draw.Text(drawList, left, textY, arrowColor, Icons.Back)
+    Draw.Text(drawList, right - ImGui.CalcTextSize(Icons.Submenu), textY, arrowColor, Icons.Submenu)
+
+    local trackLeft, trackRight = left + SLIDER_ARROW, right - SLIDER_ARROW
+    local trackWidth = trackRight - trackLeft
+    local valueWidth = ImGui.CalcTextSize(display)
+    local hasTrack = ratio ~= nil
+    local valueY = hasTrack and textY - 3 or textY
+    Draw.Text(drawList, trackLeft + (trackWidth - valueWidth) * 0.5, valueY, Style.Text, display)
+
+    if hasTrack then
+        local trackY = data.Y + data.Height - 8
+        local fill = trackWidth * math.max(0, math.min(1, ratio))
+        Draw.RectFilled(drawList, trackLeft, trackY, trackWidth, TRACK_HEIGHT, Style.Border, 1)
+        Draw.RectFilled(drawList, trackLeft, trackY, fill, TRACK_HEIGHT, Animation.LerpColor(Style.TextDisabled, Style.Accent, 0.5 + focus * 0.5), 1)
+        Draw.RectFilled(drawList, trackLeft + fill - KNOB_SIZE * 0.5, trackY - (KNOB_SIZE - TRACK_HEIGHT) * 0.5, KNOB_SIZE, KNOB_SIZE,
+            Animation.LerpColor(Style.TextDisabled, Style.Text, focus), KNOB_SIZE * 0.5)
+    end
+
+    if not clicked or not data.Hovered then return controlWidth end
+    local mouseX = Mouse.GetPosition()
+    if mouseX <= trackLeft then
+        data.ValueDirection = -1
+    elseif mouseX >= trackRight then
+        data.ValueDirection = 1
+    elseif hasTrack and mouseX >= left then
+        data.ValueRatio = (mouseX - trackLeft) / trackWidth
+    end
+    return controlWidth
+end
+
+function Button.Draw(label, tip, rightText, id, valueControl, ratio)
     local data = Widget.Begin(true)
     if not data.Visible then return false, data end
 
@@ -23,52 +67,25 @@ function Button.Draw(label, tip, rightText, id, valueControl)
     local textColor = Animation.LerpColor(Style.TextDisabled, Style.Text, 0.72 + (focus * 0.28))
     local labelX = data.X + ButtonStyle.Padding + (focus * 2)
     local labelWidth = data.Width - (ButtonStyle.Padding * 2)
-    if rightText and rightText ~= "" then
-        local valueWidth = ImGui.CalcTextSize(tostring(rightText))
-        labelWidth = labelWidth - (valueControl and math.max(88, valueWidth + 52) or valueWidth) - 12
-    end
-    Draw.Text(drawList, labelX, textY, textColor, Draw.FitText(label, labelWidth))
+    local display = rightText and tostring(rightText) or ""
 
-    if rightText and rightText ~= "" then
-        local display = tostring(rightText)
-        local width = ImGui.CalcTextSize(display)
-        local rightColor = Animation.LerpColor(Style.TextDisabled, Style.Accent, focus)
+    if display ~= "" then
         if valueControl then
-            local controlWidth = math.max(88, width + 52)
-            local capsuleX = data.X + data.Width - ButtonStyle.Padding - controlWidth
-            local capsuleY = data.Y + 4
-            local capsuleHeight = data.Height - 8
-            Draw.RectFilled(drawList, capsuleX, capsuleY, controlWidth, capsuleHeight,
-                Style.BackgroundDark, 5)
-            Draw.Rect(drawList, capsuleX, capsuleY, controlWidth, capsuleHeight,
-                Animation.LerpColor(Style.Border, Style.Accent, focus), 5, 1)
-            Draw.Line(drawList, capsuleX + 22, capsuleY + 3, capsuleX + 22,
-                capsuleY + capsuleHeight - 3, Style.Border, 1)
-            Draw.Line(drawList, capsuleX + controlWidth - 22, capsuleY + 3,
-                capsuleX + controlWidth - 22, capsuleY + capsuleHeight - 3, Style.Border, 1)
-            Draw.Text(drawList, capsuleX + 8, textY, rightColor, "<")
-            Draw.Text(drawList, capsuleX + controlWidth - 15, textY, rightColor, ">")
-            Draw.Text(drawList, capsuleX + ((controlWidth - width) * 0.5), textY, Style.Text, display)
-            if clicked and data.Hovered then
-                local mouseX = ImGui.GetMousePos()
-                if mouseX <= capsuleX + 22 then
-                    data.ValueDirection = -1
-                elseif mouseX >= capsuleX + controlWidth - 22 then
-                    data.ValueDirection = 1
-                end
-            end
+            labelWidth = labelWidth - DrawSlider(drawList, data, display, ratio, focus, clicked, textY) - 12
         else
-            local rightX = data.X + data.Width - ButtonStyle.Padding - width
-            Draw.Text(drawList, rightX, textY, rightColor, display)
+            local width = ImGui.CalcTextSize(display)
+            labelWidth = labelWidth - width - 12
+            Draw.Text(drawList, data.X + data.Width - ButtonStyle.Padding - width, textY,
+                Animation.LerpColor(Style.TextDisabled, Style.Accent, focus), display)
         end
     end
+    Draw.Text(drawList, labelX, textY, textColor, Draw.FitText(label, labelWidth))
 
     return Widget.IsActivated(data, clicked), data
 end
 
-function Button.DrawValue(label, tip, value, id)
-    return Button.Draw(label, tip, value, id, true)
+function Button.DrawValue(label, tip, value, id, ratio)
+    return Button.Draw(label, tip, value, id, true, ratio)
 end
 
 return Button
-

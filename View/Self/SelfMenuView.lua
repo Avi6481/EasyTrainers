@@ -31,6 +31,7 @@ local NoClipMenu = Submenu.Create("self.noclip.label", NoClipView)
 
 local function SelfView()
     Buttons.Submenu(L("self.noclip.label"), NoClipMenu, tip("self.noclip.tip"))
+    Buttons.Break("")
     Buttons.Toggle(L("self.godmode.label"), Self.GodMode.Enabled, tip("self.godmode.tip"))
     Buttons.Toggle(L("self.invisibility.label"), Self.Invisibility.Enabled, tip("self.invisibility.tip"))
     Buttons.Toggle(L("self.superspeed.label"), Self.SuperSpeed.Enabled, tip("self.superspeed.tip"))

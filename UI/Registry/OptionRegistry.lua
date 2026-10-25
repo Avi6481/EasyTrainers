@@ -17,10 +17,17 @@ OptionRegistry.Kind = {
 }
 
 local RefIndex = setmetatable({}, { __mode = "k" })
+local ActionIndex = setmetatable({}, { __mode = "k" })
 local HotkeyDown = {}
 
 local function HotkeyAction(id)
     return "OPTION_" .. tostring(id or ""):upper():gsub("[^A-Z0-9]+", "_")
+end
+
+local function IsHotkeyable(entry)
+    if entry.Kind == OptionRegistry.Kind.Toggle then return true end
+    if entry.Kind == OptionRegistry.Kind.Button then return entry.Action ~= nil end
+    return entry.Kind == OptionRegistry.Kind.Number and entry.Ref ~= nil and entry.Ref.enabled ~= nil
 end
 
 local function InferCategory(id)
@@ -120,7 +127,7 @@ function OptionRegistry.Register(spec)
         Persistent = spec.Persistent,
         Order = #OptionRegistry.Ordered + 1,
     }
-    if entry.Kind == OptionRegistry.Kind.Toggle and not entry.Hotkey then
+    if IsHotkeyable(entry) and not entry.Hotkey then
         entry.Hotkey = HotkeyAction(entry.Id)
     end
     if entry.Persistent == nil then
@@ -130,6 +137,7 @@ function OptionRegistry.Register(spec)
     OptionRegistry.Entries[entry.Id] = entry
     table.insert(OptionRegistry.Ordered, entry)
     if entry.Ref then RefIndex[entry.Ref] = entry end
+    if entry.Kind == OptionRegistry.Kind.Button and entry.Action then ActionIndex[entry.Action] = entry end
     ApplyLoadedValue(entry)
     return entry
 end
@@ -187,6 +195,10 @@ function OptionRegistry.FindByRef(ref)
     return ref and RefIndex[ref] or nil
 end
 
+function OptionRegistry.FindByAction(action)
+    return action and ActionIndex[action] or nil
+end
+
 function OptionRegistry.GetAll()
     local entries = {}
     for _, entry in ipairs(OptionRegistry.Ordered) do table.insert(entries, entry) end
@@ -237,6 +249,13 @@ function OptionRegistry.Activate(id)
         return changed
     end
 
+    if entry.Kind == OptionRegistry.Kind.Number and entry.Ref and entry.Ref.enabled ~= nil then
+        entry.Ref.enabled = not entry.Ref.enabled
+        OptionRegistry.Dirty = true
+        if entry.OnChange then entry.OnChange(entry.Ref.value, entry) end
+        return true
+    end
+
     if entry.Action then
         entry.Action(entry)
         return true
@@ -246,7 +265,7 @@ end
 
 function OptionRegistry.SetHotkey(id, hotkey)
     local entry = OptionRegistry.Get(id)
-    if not entry or entry.Kind ~= OptionRegistry.Kind.Toggle or type(hotkey) ~= "table" then return false end
+    if not entry or not IsHotkeyable(entry) or type(hotkey) ~= "table" then return false end
     local Bindings = require("Controls/Bindings")
     local BindingsConfig = require("Config/BindingsConfig")
     entry.Hotkey = HotkeyAction(entry.Id)
@@ -263,7 +282,7 @@ function OptionRegistry.RegisterHotkeyActions()
     local Bindings = require("Controls/Bindings")
     local count = 0
     for _, entry in ipairs(OptionRegistry.Ordered) do
-        if entry.Kind == OptionRegistry.Kind.Toggle then
+        if IsHotkeyable(entry) then
             Bindings.EnsureAction(OptionRegistry.GetHotkeyAction(entry))
             count = count + 1
         end
@@ -275,7 +294,7 @@ function OptionRegistry.UpdateHotkeys()
     local Bindings = require("Controls/Bindings")
     local changed = false
     for _, entry in ipairs(OptionRegistry.Ordered) do
-        if entry.Kind == OptionRegistry.Kind.Toggle and entry.Ref then
+        if IsHotkeyable(entry) then
             local action = entry.Hotkey or HotkeyAction(entry.Id)
             entry.Hotkey = action
             local down = Bindings.IsActionDown(action)
@@ -288,6 +307,8 @@ function OptionRegistry.UpdateHotkeys()
     end
     return changed
 end
+
+OptionRegistry.IsHotkeyable = IsHotkeyable
 
 function OptionRegistry.Search(query, options)
     options = options or {}

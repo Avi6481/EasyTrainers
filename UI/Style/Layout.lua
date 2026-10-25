@@ -12,6 +12,9 @@ function Layout.GetContentBounds(bounds)
     }
 end
 
-return Layout
+function Layout.ApplyFontScale()
+    ImGui.SetWindowFontScale((tonumber(Layout.FontScale) or 100) / 100)
+end
 
+return Layout
 

@@ -5,7 +5,7 @@ local Navigation = require("UI/Navigation/Navigation")
 local Style = require("UI/Style/Style")
 
 local Footer = {
-    Version = "by Avi  /  v2.0",
+    Version = "by Avi  /  v2.3",
     ShowVersion = true,
     ShowNavigation = true,
     ShowFps = false,

@@ -2,6 +2,8 @@ local Logger = require("Core/Logger")
 
 local StatusEffect = {}
 
+local TAG = "EasyTrainer.StatusEffect"
+
 local s_Owners = {}
 
 local function GetContext()
@@ -16,7 +18,7 @@ local function Apply(effect)
     if not system then return false end
 
     local entityID = player:GetEntityID()
-    system:ApplyStatusEffect(entityID, effect, player:GetRecordID(), entityID)
+    system:ApplyStatusEffect(entityID, effect, TweakDBID.new(TAG), entityID, 1, Vector4.new(0, 0, 0, 0), false)
     return true
 end
 
@@ -86,6 +88,33 @@ function StatusEffect.RemoveUnowned(effects)
         if not IsOwned(effect) and StatusEffect.Has(effect) and Remove(effect) then
             removed = removed + 1
             Logger.Log("StatusEffect: removed saved trainer effect " .. tostring(effect))
+        end
+    end
+    return removed
+end
+
+local function Key(id)
+    return id and (tostring(id.hash) .. ":" .. tostring(id.length)) or ""
+end
+
+function StatusEffect.RemoveStale(effects)
+    local system, player = GetContext()
+    if not system then return nil end
+
+    local wanted = {}
+    for _, effect in ipairs(effects or {}) do wanted[Key(TweakDBID.new(effect))] = effect end
+    local tag, legacy = Key(TweakDBID.new(TAG)), Key(player:GetRecordID())
+
+    local ok, applied = pcall(function() return system:GetAppliedEffects(player:GetEntityID()) end)
+    if not ok or type(applied) ~= "table" then return nil end
+
+    local removed = 0
+    for _, entry in ipairs(applied) do
+        local effect = wanted[Key(entry:GetRecord():GetID())]
+        local instigator = Key(entry:GetInstigatorStaticDataID())
+        if effect and not IsOwned(effect) and (instigator == tag or instigator == legacy) and Remove(effect) then
+            removed = removed + 1
+            Logger.Log("StatusEffect: removed stale trainer effect " .. effect)
         end
     end
     return removed

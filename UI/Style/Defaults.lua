@@ -16,6 +16,8 @@ local Defaults = {
         Spacing = 3,
         BorderSize = 1,
         Rounding = 8,
+        FontScale = 80,
+        UseIcons = true,
     },
     Colors = {
         Background = 0xF51A1A1A,

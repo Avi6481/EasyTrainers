@@ -5,11 +5,15 @@ local Input = {}
 local s_Handler = nil
 local s_LastDevice = "Keyboard"
 local s_WarnedMissing = false
+local s_NextDeviceCheck = 0
+
+local DEVICE_CHECK_INTERVAL = 0.1
 
 function Input.Initialize()
     s_Handler = EasyInputHandler and EasyInputHandler.new() or nil
     if s_Handler then
         Logger.Log("Input: EasyInputHandler initialized")
+        pcall(function() if s_Handler.LogInputDiagnostics then s_Handler:LogInputDiagnostics() end end)
         return
     end
 
@@ -30,7 +34,51 @@ local function Call(method, fallback, ...)
     return handler[method](handler, ...)
 end
 
+local s_Supported = {}
+
+function Input.Supports(method)
+    if s_Supported[method] ~= nil then return s_Supported[method] end
+    local handler = Handler()
+    if not handler then return false end
+
+    local ok, found = pcall(function() return handler[method] ~= nil end)
+    s_Supported[method] = ok and found
+    return s_Supported[method]
+end
+
+function Input.GetMousePosition()
+    if not Input.Supports("GetMouseX") then return nil end
+    return Call("GetMouseX", 0), Call("GetMouseY", 0)
+end
+
+function Input.IsMouseButtonDown(button)
+    if not Input.Supports("IsMouseButtonDown") then return nil end
+    return Call("IsMouseButtonDown", false, button)
+end
+
+function Input.ConsumeMouseWheel()
+    if not Input.Supports("ConsumeMouseWheel") then return 0 end
+    return Call("ConsumeMouseWheel", 0)
+end
+
+function Input.BeginTextCapture()
+    if Input.Supports("BeginTextCapture") then Call("BeginTextCapture", nil) end
+end
+
+function Input.EndTextCapture()
+    if Input.Supports("EndTextCapture") then Call("EndTextCapture", nil) end
+end
+
+function Input.ConsumeTypedText()
+    if not Input.Supports("ConsumeTypedText") then return nil end
+    return Call("ConsumeTypedText", "")
+end
+
 function Input.UpdateDevice()
+    local now = os.clock()
+    if now < s_NextDeviceCheck then return s_LastDevice end
+    s_NextDeviceCheck = now + DEVICE_CHECK_INTERVAL
+
     if Call("IsKeyboardActive", false) then
         s_LastDevice = "Keyboard"
     elseif Call("IsGamepadActive", false) then
@@ -54,6 +102,7 @@ Input.VK = {
     RIGHT = 0x27,
     ENTER = 0x0D,
     BACKSPACE = 0x08,
+    DELETE = 0x2E,
     ESCAPE = 0x1B,
     TAB = 0x09,
     SHIFT = 0x10,

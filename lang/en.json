@@ -250,6 +250,35 @@
   },
   "playerdev": {
     "title": "Player Development",
+    "overview": {
+      "header": "Overview",
+      "level": { "label": "Level", "tip": "Your current character level." },
+      "streetcred": { "label": "Street Cred", "tip": "Your current Street Cred level." }
+    },
+    "quick": {
+      "header": "Quick Actions",
+      "maxlevel": { "label": "Max Level and Street Cred", "tip": "Sets your level and Street Cred to their maximums.", "done": "Level and Street Cred maxed" },
+      "maxattributes": { "label": "Max All Attributes", "tip": "Sets Body, Reflexes, Technical Ability, Intelligence, and Cool to 20.", "done": "Attributes maxed" },
+      "maxskills": { "label": "Max All Skills", "tip": "Sets every skill proficiency to its maximum level.", "done": "Skills maxed" },
+      "unlockperks": { "label": "Unlock Every Perk", "tip": "Acquires every perk at its highest level, in requirement order.", "done": "{count} perk levels acquired" },
+      "resetperks": { "label": "Remove Every Perk", "tip": "Removes every acquired perk from every attribute.", "done": "{count} perk levels removed" }
+    },
+    "attributerows": {
+      "tip": "Sets your {attribute} level directly."
+    },
+    "perkbrowser": {
+      "label": "Perks",
+      "tip": "Browse perks by attribute, with descriptions and requirements in the side panel.",
+      "attributetip": "Perks that belong to {attribute}.",
+      "unlockall": { "label": "Unlock Every {attribute} Perk", "tip": "Acquires every perk in this attribute at its highest level." },
+      "removeall": { "label": "Remove Every {attribute} Perk", "tip": "Removes every acquired perk in this attribute." },
+      "eyebrow": "PERK",
+      "attribute": "Attribute",
+      "category": "Category",
+      "level": "Level",
+      "requires": "Requires",
+      "none": "None"
+    },
     "submenus": {
       "proficiencies": {
         "label": "Proficiencies Levels",
@@ -753,7 +782,7 @@
     },
     "explosivebullets": {
       "label": "Explosive Bullets",
-      "tip": "Shooting causes explosions at your crosshair location, regardless of bullet type or impact."
+      "tip": "Every bullet explodes where it lands: on the exact spot it hits an enemy, or on the wall or ground you shot. Pick the explosion type and damage below."
     },
     "explosiveknives": {
       "label": "Explosive Knives",
@@ -777,19 +806,19 @@
     },
     "infiniteammo": {
       "label": "Infinite Ammo",
-      "tip": "Your ammo never runs out. Each time you shoot, you instantly get the bullet back."
+      "tip": "Your reserve ammo never runs out. You still reload; pair with No Reload for a bottomless magazine. Works on both guns when dual wielding."
     },
     "noreload": {
-      "label": "No Reload",
-      "tip": "Removes reload time. Fire continuously without waiting to reload."
+      "label": "Bottomless Magazine",
+      "tip": "Shots don't use up the magazine, so you never need to reload. Different from Infinite Ammo, which refills reserve ammo."
     },
     "speedcola": {
       "label": "Speed Cola",
-      "tip": "Greatly reduces reload time."
+      "tip": "Reloads about 5x faster. For a custom speed use Weapon Tuning > Reload Speed instead."
     },
     "norecoil": {
       "label": "No Recoil",
-      "tip": "Removes recoil from all weapons. No more shaking when firing.\nTip: Great with Problem Solver."
+      "tip": "Removes recoil kick from all guns. Weapon Tuning > Recoil lets you reduce it partially instead."
     },
     "flyingthundergod": {
       "label": "Flying Thunder God Technique",
@@ -804,24 +833,24 @@
       "tip": "Thrown knives or projectiles automatically return to you after hitting a target or surface."
     },
     "teleygun": {
-      "label": "Teley Gun",
-      "tip": "Shoot bullets that teleport you to where they land."
+      "label": "Teleport Gun",
+      "tip": "Shooting teleports you to where your crosshair is pointing (up to 250 m)."
     },
     "alwayscrit": {
       "label": "Always Critical",
-      "tip": "Every attack you make is guaranteed to be a critical hit."
+      "tip": "Every hit is a critical hit. Weapon Tuning > Crit Chance does the same with a custom percentage."
     },
     "insanecritdmg": {
       "label": "Insane Critical Damage",
-      "tip": "Adds an extreme boost to critical hit damage for devastating blows."
+      "tip": "Critical hits deal enormous damage, enough to one-shot almost anything. Weapon Tuning > Crit Damage lets you pick a smaller boost."
     },
     "rapidfire": {
       "label": "Rapid Fire",
-      "tip": "Drastically increases weapon fire rate by reducing cycle time."
+      "tip": "Fires about 10x faster. For a custom fire rate use Weapon Tuning > Fire Rate instead."
     },
     "shotgunspray": {
       "label": "Shotgun Spray",
-      "tip": "Adds extra projectiles per shot, turning any gun into a shotgun."
+      "tip": "Adds 15 extra pellets to every shot. For a custom pellet count use Weapon Tuning > Extra Pellets instead."
     },
     "melee_highblock": {
       "label": "High Block",
@@ -873,11 +902,11 @@
     },
     "hipfireaccuracy": {
       "label": "Hipfire Accuracy",
-      "tip": "Tightens weapon spread when firing from the hip. Turns guns into hipfire lasers."
+      "tip": "Tightens spread when firing from the hip. Weapon Tuning > Spread affects hip fire and ADS together."
     },
     "adsaccuracy": {
       "label": "ADS Accuracy",
-      "tip": "Tightens weapon spread when aiming down sights for near-perfect precision."
+      "tip": "Tightens spread when aiming down sights. Weapon Tuning > Spread affects hip fire and ADS together."
     },
     "ammoitems": {
       "title": "Ammo Items",
@@ -1480,6 +1509,15 @@
     "showdistrictfilter": {
       "label": "Show District Filters",
       "tip": "Toggle the parent/child district filter dropdowns."
+    },
+    "clearrestrictions": {
+      "label": "Clear Stuck Restrictions",
+      "tip": "Fixes teleport, noclip, fast travel, or phone calls that stopped working after loading a save.",
+      "done": "Cleared {count} stuck restrictions"
+    },
+    "showmap": {
+      "label": "Show Map",
+      "tip": "Show a live map beside the teleport menu that follows your filters and the location you highlight."
     },
     "showcreatorfilter": {
       "label": "Show Creator Filter",

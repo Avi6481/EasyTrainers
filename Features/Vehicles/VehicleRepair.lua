@@ -4,6 +4,12 @@ local Vehicle = require("Utils/Vehicle")
 
 local VehicleRepair = {}
 
+VehicleRepair.AutoRepair = { value = false }
+
+local AUTO_INTERVAL = 0.5
+
+local s_NextAuto = 0
+
 local DESTRUCTION_PARTS = {
     "hood_destruction",
     "wheel_f_l_destruction",
@@ -17,21 +23,49 @@ local DESTRUCTION_PARTS = {
     "bumper_f_destruction_side_2"
 }
 
+local function Try(label, callback)
+    local ok, err = pcall(callback)
+    if not ok then Logger.Log("VehicleRepair: " .. label .. " failed (" .. tostring(err) .. ")") end
+    return ok
+end
+
 function VehicleRepair.IsVehicleDamaged()
     local vehicle = Vehicle.GetMountedVehicleSafe()
     local persistentState = vehicle and vehicle:GetVehiclePS() or nil
     return persistentState and persistentState:GetIsDestroyed() or false
 end
 
-local function ResetBodyParts(vehicle, component)
+function VehicleRepair.RestoreVisuals(vehicle)
+    Try("destruction grid", function() vehicle:DestructionResetGrid() end)
+    Try("glass", function() vehicle:DestructionResetGlass() end)
+    Try("tires", function()
+        for i = 0, 3 do vehicle:ToggleBrokenTire(i, false) end
+    end)
+end
+
+local function ResetBodyParts(vehicle)
     local vehicleType = vehicle:GetVehicleType()
     if vehicleType and vehicleType.value == "Bike" then return end
 
-    component.bumperFrontState = 0
-    component.bumperBackState = 0
+    local component = vehicle:GetVehicleComponent()
+    if component then
+        component.bumperFrontState = 0
+        component.bumperBackState = 0
+    end
     for _, part in ipairs(DESTRUCTION_PARTS) do
         AnimationControllerComponent.SetInputFloat(vehicle, part, 0.0)
     end
+end
+
+function VehicleRepair.Repair(vehicle)
+    Try("repair event", function() vehicle:QueueEvent(VehicleRepairEvent.new()) end)
+    Try("health", function()
+        Game.GetStatPoolsSystem():RequestSettingStatPoolMaxValue(vehicle:GetEntityID(), gamedataStatPoolType.Health, vehicle)
+    end)
+    Try("persistent state", function() vehicle:GetVehiclePS():SetIsDestroyed(false) end)
+    Try("paint lock", function() vehicle:GetVehiclePS():SetVehicleVisualCustomizationnBlockedByDamage(false) end)
+    Try("body parts", function() ResetBodyParts(vehicle) end)
+    VehicleRepair.RestoreVisuals(vehicle)
 end
 
 function VehicleRepair.RepairMounted()
@@ -41,32 +75,34 @@ function VehicleRepair.RepairMounted()
         return false
     end
 
-    local persistentState = vehicle:GetVehiclePS()
-    local component = vehicle:GetVehicleComponent()
-    if not persistentState or not component then
-        Logger.Log("VehicleRepair: missing VehiclePS or VehicleComponent")
-        return false
-    end
-
-    component.damageLevel = 0
-    ResetBodyParts(vehicle, component)
-
-    if vehicle:GetFlatTireIndex() >= 0 then
-        for i = 0, 3 do vehicle:ToggleBrokenTire(i, false) end
-    end
-
-    vehicle:DestructionResetGrid()
-    vehicle:DestructionResetGlass()
-    component:UpdateDamageEngineEffects()
-    component:RepairVehicle()
-    component:VehicleVisualDestructionSetup()
-
-    persistentState:CloseAllVehDoors(true)
-    persistentState:CloseAllVehWindows()
-    persistentState:ForcePersistentStateChanged()
-
+    VehicleRepair.Repair(vehicle)
     Logger.Log("VehicleRepair: repaired mounted vehicle")
+    Notification.Success("Vehicle repaired", 2)
     return true
+end
+
+local function IsHurt(vehicle)
+    local ok, health = pcall(function()
+        return Game.GetStatPoolsSystem():GetStatPoolValue(vehicle:GetEntityID(), gamedataStatPoolType.Health, true)
+    end)
+    return ok and health ~= nil and health < 100
+end
+
+function VehicleRepair.Tick()
+    if not VehicleRepair.AutoRepair.value then return end
+
+    local now = os.clock()
+    if now < s_NextAuto then return end
+    s_NextAuto = now + AUTO_INTERVAL
+
+    local vehicle = Vehicle.GetMountedVehicleSafe()
+    if not vehicle then return end
+
+    if IsHurt(vehicle) then
+        VehicleRepair.Repair(vehicle)
+    else
+        VehicleRepair.RestoreVisuals(vehicle)
+    end
 end
 
 return VehicleRepair

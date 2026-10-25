@@ -2,7 +2,7 @@ local Buttons = require("UI/Options/Buttons")
 local Submenu = require("UI/Navigation/Submenu")
 
 local function AboutView()
-    Buttons.OptionExtended("EasyTrainer", "", "v2.0", "An accessible Cyberpunk 2077 trainer with keyboard, controller, and mouse support.")
+    Buttons.OptionExtended("EasyTrainer", "", "v2.3", "An accessible Cyberpunk 2077 trainer with keyboard, controller, and mouse support.")
 
     Buttons.Break("Credits")
     Buttons.OptionExtended("Created By", "", "Avi", "EasyTrainer creator and maintainer.")

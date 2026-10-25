@@ -10,6 +10,7 @@ local Tip = {
     Writer = Animation.CreateTypewriter(),
     Alpha = 0,
     MissingTime = 0,
+    Height = 0,
 }
 
 local function TextColored(color, text)
@@ -18,6 +19,8 @@ local function TextColored(color, text)
 end
 
 local function EstimateHeight(text, width)
+    local scale = (tonumber(Layout.FontScale) or 100) / 100
+    width = width / scale
     local lines = 0
     for rawLine in (tostring(text or "") .. "\n"):gmatch("(.-)\n") do
         local lineWidth = 0
@@ -32,7 +35,7 @@ local function EstimateHeight(text, width)
             end
         end
     end
-    return math.max(38, (lines * ImGui.GetTextLineHeight()) + 26)
+    return math.max(38, (lines * ImGui.GetTextLineHeight() * scale) + 26)
 end
 
 function Tip.Initialize()
@@ -41,6 +44,7 @@ function Tip.Initialize()
     Tip.Writer = Animation.CreateTypewriter()
     Tip.Alpha = 0
     Tip.MissingTime = 0
+    Tip.Height = 0
 end
 
 function Tip.BeginFrame()
@@ -74,7 +78,10 @@ function Tip.Draw()
     local target = (Tip.SubmittedText or (Tip.Writer.Current ~= "" and Tip.MissingTime < 0.18)) and 1 or 0
     Tip.Alpha = Animation.Animate(Tip.Alpha, target, 14, dt)
     if Tip.Alpha < 0.01 then
-        if target == 0 then Tip.Writer = Animation.CreateTypewriter() end
+        if target == 0 then
+            Tip.Writer = Animation.CreateTypewriter()
+            Tip.Height = 0
+        end
         return
     end
 
@@ -84,7 +91,9 @@ function Tip.Draw()
 
     local bounds = Context.Bounds
     local gap, padding = 8, 12
-    local height = EstimateHeight(Tip.Writer.Current, bounds.Width - (padding * 2))
+    local wanted = EstimateHeight(displayed, bounds.Width - (padding * 2))
+    Tip.Height = Tip.Height <= 0 and wanted or Animation.Animate(Tip.Height, wanted, 18, dt)
+    local height = math.floor(Tip.Height + 0.5)
     local _, screenHeight = GetDisplayResolution()
     local y = bounds.Y + bounds.Height + gap
     if y + height > screenHeight then y = bounds.Y - height - gap end
@@ -97,6 +106,7 @@ function Tip.Draw()
     ImGui.Begin("##EasyTrainerTip", ImGuiWindowFlags.NoDecoration + ImGuiWindowFlags.NoInputs
         + ImGuiWindowFlags.NoScrollbar + ImGuiWindowFlags.NoScrollWithMouse
         + ImGuiWindowFlags.NoSavedSettings)
+    Layout.ApplyFontScale()
 
     local x, windowY = ImGui.GetWindowPos()
     local drawList = ImGui.GetWindowDrawList()

@@ -100,7 +100,10 @@ function Handler.Update()
         return
     end
 
-    if State.TypingEnabled then return end
+    if State.TypingEnabled then
+        s_LastTick.SELECT, s_LastTick.BACK = now, now
+        return
+    end
 
     for _, entry in ipairs(REPEATING_ACTIONS) do UpdateRepeating(entry, now) end
     for _, entry in ipairs(SINGLE_ACTIONS) do

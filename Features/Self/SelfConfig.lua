@@ -29,11 +29,20 @@ local function RegisterAllSelfOptions()
         Number("number.self.noclip.boost", Self.NoClip.BoostMultiplier, 2.5, "Boost Multiplier"),
         Number("number.self.noclip.precision", Self.NoClip.PrecisionMultiplier, 0.7, "Precision Multiplier"),
         Number("number.self.noclip.deadzone", Self.NoClip.GamepadDeadzone, 7849, "Gamepad Deadzone"),
+        Number("number.self.speedmultiplier", Modifiers.Movement.SpeedMultiplier, 5.0, "Player Speed Multiplier"),
+        Number("number.self.jumpmultiplier", Modifiers.Movement.JumpMultiplier, 3.0, "Jump Height Multiplier"),
+        Number("number.self.sandevistanscale", Modifiers.Movement.SandevistanTimeScale, 0.1, "Sandevistan Time Scale"),
+        Number("number.self.sandevistanduration", Modifiers.Movement.SandevistanDuration, 2.5, "Sandevistan Duration"),
+        Number("number.self.carrycapacity", Modifiers.Utility.CarryCapacity, 360, "Carry Capacity"),
+        Number("number.self.memorystat", Enhancements.MemoryStat, 20.0, "Memory Stat"),
         Toggle("toggle.self.infinitejump", Self.InfiniteJumps.Enabled, "self.infinitejump.label", { "movement", "jump" }),
         Toggle("toggle.self.infiniteairdash", Self.InfiniteAirDash.Enabled, "self.infiniteairdash.label", { "movement", "dash" }),
         Toggle("toggle.self.airthrusters", Self.AirThrusterBoots.Enabled, "modifiers.airthrusterboots.label", { "movement", "hover", "fly" }),
         Toggle("toggle.self.airhover", Self.AdvancedMobility.AirHover, "modifiers.airhover.label", { "movement", "hover", "air" }),
         Toggle("toggle.self.neverwanted", Self.WantedLevel.NeverWanted, "self.neverwanted.label", { "wanted", "police" }),
+        OptionConfig.DefineButton("button.self.clearwanted", Self.WantedLevel.Clear, {
+            LabelKey = "self.clearwanted.label", TipKey = "self.clearwanted.tip", Category = "self", Keywords = { "wanted", "police", "heat" }
+        }),
         Toggle("toggle.self.quicksilver", Modifiers.Movement.Quicksilver, "self.quicksilversandevistan.label", { "movement", "speed", "sandevistan" }),
 
         Toggle("toggle.self.refillhealth", Enhancements.RefillHealth, "self.refillhealth.label", { "health", "restore" }),

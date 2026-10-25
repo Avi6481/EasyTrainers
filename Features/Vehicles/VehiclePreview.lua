@@ -9,10 +9,13 @@ local VehiclePreview = {}
 local DISTANCE = 13.0
 local SPIN_SPEED = 30.0
 local SPAWN_TIMEOUT = 8.0
+local SPAWN_DELAY = 0.35
 local HEIGHT_OFFSET = 0.7
 
 local s_EntityID = nil
 local s_RecordID = nil
+local s_RequestedID = nil
+local s_RequestedAt = 0
 local s_Rotation = 0.0
 local s_SpawnWait = 0.0
 local s_Active = false
@@ -21,17 +24,17 @@ local function IsShowing()
     return s_Active and State.IsMenuOpen()
 end
 
-function VehiclePreview.Clear()
-    if s_EntityID then
-        local entitySystem = Game.GetDynamicEntitySystem()
-        if entitySystem then entitySystem:DeleteEntity(s_EntityID) end
-        VehicleSpawning.Forget(s_EntityID)
-    end
-
+local function Despawn()
+    if s_EntityID then VehicleSpawning.Despawn(s_EntityID) end
     s_EntityID = nil
     s_RecordID = nil
     s_Rotation = 0
     s_SpawnWait = 0
+end
+
+function VehiclePreview.Clear()
+    Despawn()
+    s_RequestedID = nil
 end
 
 function VehiclePreview.SetActive(active)
@@ -40,21 +43,23 @@ function VehiclePreview.SetActive(active)
 end
 
 function VehiclePreview.Spawn(recordID)
-    if not IsShowing() then
-        VehiclePreview.Clear()
-        return
-    end
-
-    if s_RecordID == recordID then return end
-
-    VehiclePreview.Clear()
-    s_RecordID = recordID
-    s_EntityID = VehicleSpawning.SpawnVehicle(recordID, DISTANCE, false, false)
-    if not s_EntityID then Logger.Log("VehiclePreview: failed to spawn " .. tostring(recordID)) end
+    if not IsShowing() or s_RequestedID == recordID then return end
+    s_RequestedID = recordID
+    s_RequestedAt = os.clock()
 end
 
-local function WaitForSpawn(entitySystem, deltaTime)
-    if entitySystem:IsSpawned(s_EntityID) then
+local function SpawnRequested()
+    if not s_RequestedID or s_RequestedID == s_RecordID then return end
+    if os.clock() - s_RequestedAt < SPAWN_DELAY then return end
+
+    Despawn()
+    s_RecordID = s_RequestedID
+    s_EntityID = VehicleSpawning.SpawnUntracked(s_RecordID, DISTANCE)
+    if not s_EntityID then Logger.Log("VehiclePreview: failed to spawn " .. tostring(s_RecordID)) end
+end
+
+local function WaitForSpawn(deltaTime)
+    if VehicleSpawning.IsSpawned(s_EntityID) then
         s_SpawnWait = 0
         return true
     end
@@ -62,24 +67,22 @@ local function WaitForSpawn(entitySystem, deltaTime)
     s_SpawnWait = s_SpawnWait + deltaTime
     if s_SpawnWait >= SPAWN_TIMEOUT then
         Logger.Log("VehiclePreview: timed out spawning " .. tostring(s_RecordID))
-        VehiclePreview.Clear()
+        Despawn()
     end
     return false
 end
 
 function VehiclePreview.Update(deltaTime)
     if not IsShowing() then
-        if s_EntityID then VehiclePreview.Clear() end
+        if s_EntityID or s_RequestedID then VehiclePreview.Clear() end
         return
     end
 
-    if not s_EntityID then return end
+    SpawnRequested()
+    if not s_EntityID or not Game.GetPlayer() then return end
+    if not WaitForSpawn(deltaTime) then return end
 
-    local entitySystem = Game.GetDynamicEntitySystem()
-    if not entitySystem or not Game.GetPlayer() then return end
-    if not WaitForSpawn(entitySystem, deltaTime) then return end
-
-    local entity = entitySystem:GetEntity(s_EntityID)
+    local entity = VehicleSpawning.GetEntity(s_EntityID)
     local position = entity and Teleport.GetForwardOffset(DISTANCE) or nil
     if not position then return end
 
@@ -92,6 +95,7 @@ Lifecycle.Register("VehiclePreview", {
     OnSessionEnd = function()
         s_EntityID = nil
         s_RecordID = nil
+        s_RequestedID = nil
     end,
     OnShutdown = VehiclePreview.Clear
 })

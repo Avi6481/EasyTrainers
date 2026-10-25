@@ -1,4 +1,5 @@
 local Animation = require("UI/Widgets/Animation/Animation")
+local Icons = require("UI/Style/Icons")
 local Context = require("UI/Core/Context")
 local Draw = require("UI/Core/Draw")
 local Highlight = require("UI/Widgets/Core/Highlight")
@@ -7,6 +8,7 @@ local Style = require("UI/Style/Style")
 local Surface = require("UI/Widgets/Surface/Surface")
 local SurfaceStyle = require("UI/Widgets/Surface/SurfaceStyle")
 local Widget = require("UI/Widgets/Core/Widget")
+local Mouse = require("Core/Mouse")
 
 local ColorPicker = {
     Surface = Surface.Create("##EasyTrainerColorPicker"),
@@ -22,9 +24,9 @@ local Channels = { "Red", "Green", "Blue", "Alpha" }
 
 local function MouseInteraction(x, y, width, height)
     if not Navigation.State.MouseEnabled then return false, false end
-    local mouseX, mouseY = ImGui.GetMousePos()
+    local mouseX, mouseY = Mouse.GetPosition()
     local hovered = mouseX >= x and mouseX <= x + width and mouseY >= y and mouseY <= y + height
-    return hovered, hovered and ImGui.IsMouseClicked(0)
+    return hovered, hovered and Mouse.IsClicked()
 end
 
 local function PackedColor(ref)
@@ -98,7 +100,7 @@ function ColorPicker.Option(id, label, value, tip)
     local swatchX = data.X + data.Width - swatchSize - 8
     Draw.Text(drawList, data.X + 8, textY, Style.Text, Draw.FitText(label, data.Width - 120))
     Draw.Text(drawList, swatchX - 18, textY, Style.Accent,
-        ColorPicker.Opened and ColorPicker.OwnerId == id and "v" or ">")
+        ColorPicker.Opened and ColorPicker.OwnerId == id and Icons.Expanded or Icons.Collapsed)
     Draw.RectFilled(drawList, swatchX, data.Y + 5, swatchSize, swatchSize, PackedColor(value), 5)
     Draw.Rect(drawList, swatchX, data.Y + 5, swatchSize, swatchSize, Style.Border, 5, 1)
 
@@ -152,7 +154,7 @@ function ColorPicker.Draw()
         Draw.Rect(drawList, barX, barY, barWidth, 10, Style.Border, 5, 1)
         Draw.Text(drawList, x + contentWidth - 31, rowY + 10, Style.TextDisabled, tostring(value))
         if clicked then
-            local mouseX = ImGui.GetMousePos()
+            local mouseX = Mouse.GetPosition()
             ColorPicker.Value[channel] = math.floor(math.max(0, math.min(1, (mouseX - barX) / barWidth)) * 255)
             ColorPicker.ChangedOwner = ColorPicker.OwnerId
         end
