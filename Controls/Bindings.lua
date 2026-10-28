@@ -52,7 +52,7 @@ Bindings.DefaultActions = {
     EDITOR_SELECT = { keys = { Input.VK.LBUTTON }, btns = { Input.GP.RIGHT_TRIGGER } },
     EDITOR_ROTATE = { keys = { Input.VK.RBUTTON }, btns = { Input.GP.LEFT_TRIGGER } },
     EDITOR_GROUND = { keys = { Input.VK.SPACE }, btns = { Input.GP.X } },
-    EDITOR_MULTI = { keys = { Input.VK.CTRL }, btns = {} },
+    EDITOR_MULTI = { keys = { Input.VK.CTRL }, btns = { Input.GP.B } },
     EDITOR_LINK = { keys = { Input.VK.ENTER }, btns = { Input.GP.Y } },
     EDITOR_COPY = { keys = { Input.VK.CTRL, Input.VK.C }, btns = {} },
     EDITOR_CUT = { keys = { Input.VK.CTRL, Input.VK.X }, btns = {} },

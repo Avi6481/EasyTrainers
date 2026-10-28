@@ -1,5 +1,6 @@
 local Logger = require("Core/Logger")
 local Lifecycle = require("Core/Lifecycle")
+local Input = require("Core/Input")
 local Bindings = require("Controls/Bindings")
 local State = require("Controls/State")
 local StatusEffect = require("Utils/StatusEffect")
@@ -244,7 +245,8 @@ end
 function WorldEditor.LinkSelection()
     local selected = Selection.GetAll()
     if #selected == 0 then
-        Notification.Warning("Click a prop, Ctrl+click its parent, then press Enter.")
+        Notification.Warning(Input.IsController() and "Select a prop, hold B and press RT on its parent, then press Y."
+            or "Click a prop, Ctrl+click its parent, then press Enter.")
         return
     end
 
@@ -253,7 +255,8 @@ function WorldEditor.LinkSelection()
         if Attachments.Detach(only.Entity) then
             Notification.Info(only.Name .. " detached.")
         else
-            Notification.Warning("Ctrl+click a parent for " .. only.Name .. ".")
+            local pick = Input.IsController() and "Hold B and press RT on a parent for " or "Ctrl+click a parent for "
+            Notification.Warning(pick .. only.Name .. ".")
         end
         return
     end
@@ -384,6 +387,7 @@ function WorldEditor.Tick(deltaTime)
         return
     end
 
+    Input.UpdateDevice()
     FreeCam.Tick(deltaTime)
     Grab.Tick(deltaTime)
     UpdateLinkKey()

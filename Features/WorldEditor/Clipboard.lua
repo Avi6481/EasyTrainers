@@ -1,4 +1,5 @@
 local Notification = require("UI/Panels/Notification/Notification")
+local Input = require("Core/Input")
 local Selection = require("Features/WorldEditor/Selection")
 local PropSpawner = require("Features/WorldEditor/PropSpawner")
 local Layout = require("Features/WorldEditor/Layout")
@@ -65,7 +66,8 @@ end
 
 function Clipboard.Paste()
     if not s_Layout then
-        Notification.Warning("Nothing copied yet. Select props and press Ctrl+C.")
+        Notification.Warning(Input.IsController() and "Nothing copied yet. Copy something from Selection first."
+            or "Nothing copied yet. Select props and press Ctrl+C.")
         return
     end
     local target = Layout.Target()

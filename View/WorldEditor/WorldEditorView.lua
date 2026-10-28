@@ -1,4 +1,5 @@
 local Buttons = require("UI/Options/Buttons")
+local Input = require("Core/Input")
 local Submenu = require("UI/Navigation/Submenu")
 local Notification = require("UI/Panels/Notification/Notification")
 local SidePanel = require("UI/Panels/SidePanel/SidePanel")
@@ -79,7 +80,7 @@ end
 local function MoveSettingsView()
     Buttons.Float("Hold Delay", Grab.HoldDelay, "How long to hold Select before it picks the entity up.")
     Buttons.Float("Nudge Speed", Grab.NudgeSpeed, "How fast the arrow keys slide the selection.")
-    Buttons.Float("Rotate Speed", Grab.RotateSpeed, "How fast right click turns and tilts the selection.")
+    Buttons.Float("Rotate Speed", Grab.RotateSpeed, "How fast Rotate turns and tilts the selection.")
     Buttons.Toggle("Keep Facing", Grab.KeepFacing, "Turn carried entities with the camera.")
     Buttons.Toggle("Stand Peds On Ground", Grab.SnapPedsToGround, "Drop peds onto the ground when released.")
     Buttons.Toggle("Outline Selection", Selection.Highlight, "Outline the selected entity.", Selection.RefreshHighlight)
@@ -112,13 +113,13 @@ local function ControlsView()
     Buttons.Bind("Slow", "EDITOR_SLOW", "Hold to fly, nudge, and rotate slower.")
 
     Buttons.Break("Editing")
-    Buttons.Bind("Select / Carry", "EDITOR_SELECT", "Click to select. Hold to carry, release to drop.")
-    Buttons.Bind("Rotate", "EDITOR_ROTATE", "Hold and move the mouse to turn and tilt the selection.")
-    Buttons.Bind("Multi-Select", "EDITOR_MULTI", "Hold while clicking to add to the selection. The last one is the parent.")
+    Buttons.Bind("Select / Carry", "EDITOR_SELECT", "Press to select. Hold to carry, release to drop.")
+    Buttons.Bind("Rotate", "EDITOR_ROTATE", "Hold and move the mouse or right stick to turn and tilt the selection.")
+    Buttons.Bind("Multi-Select", "EDITOR_MULTI", "Hold while selecting to add to the selection. The last one is the parent.")
     Buttons.Bind("Attach / Detach", "EDITOR_LINK", "Attach the selection to the parent, or detach a single attached prop.")
     Buttons.Bind("Ground", "EDITOR_GROUND", "Hold while carrying to stay on the ground. Tap to drop the selection onto the ground.")
-    Buttons.Bind("Nudge Forward", "EDITOR_ADJUST_FORWARD", "Slide the selection away from the camera.")
-    Buttons.Bind("Nudge Backward", "EDITOR_ADJUST_BACKWARD", "Slide the selection toward the camera.")
+    Buttons.Bind("Nudge Forward", "EDITOR_ADJUST_FORWARD", "Slide the selection away from the camera, or push a carried prop out.")
+    Buttons.Bind("Nudge Backward", "EDITOR_ADJUST_BACKWARD", "Slide the selection toward the camera, or pull a carried prop in.")
     Buttons.Bind("Nudge Left", "EDITOR_ADJUST_LEFT", "Slide the selection left.")
     Buttons.Bind("Nudge Right", "EDITOR_ADJUST_RIGHT", "Slide the selection right.")
 
@@ -531,11 +532,12 @@ local s_SelectionView = Submenu.Create("Selection", function()
     local selected = Selection.GetAll()
     Buttons.Break(string.format("Selected (%d)", #selected))
     if #selected == 0 then
-        Buttons.OptionExtended("Nothing is selected.", "", "", "Click something in the editor or pick it from Scene.")
+        Buttons.OptionExtended("Nothing is selected.", "", "", "Select something in the editor or pick it from Scene.")
         return
     end
     local label = UniqueLabels()
-    local tip = #selected > 1 and "Attach puts this onto the parent." or "Ctrl+click a parent to attach it."
+    local pick = Input.IsController() and "Hold B and press RT on a parent to attach it." or "Ctrl+click a parent to attach it."
+    local tip = #selected > 1 and "Attach puts this onto the parent." or pick
     for index, entry in ipairs(selected) do
         local parent = #selected > 1 and index == #selected
         Buttons.OptionExtended(label(entry.Name), "", parent and "PARENT" or "", parent and "Attach puts the others onto this one." or tip)
@@ -589,24 +591,49 @@ local s_SavesView = Submenu.Create("Saved Scenes", function()
 end)
 
 local HOW_TO = {
-    { "Fly", "WASD to move, E and Q for up and down. Shift is fast, Alt is slow, and the wheel sets speed." },
-    { "Spawn", "Hover a prop in Spawn Props to preview it. Select it to place it." },
-    { "Select", "Click anything to select it." },
-    { "Carry", "Hold click to carry. The wheel sets distance and Space keeps it on the ground." },
-    { "Rotate", "Hold right click and move the mouse to turn and tilt." },
-    { "Nudge", "With the menu closed, the arrow keys slide the selection." },
-    { "Attach", "Click a prop, Ctrl+click its parent, then press Enter with the menu closed." },
-    { "Detach", "Select an attached prop and press Backspace. On a parent, Backspace detaches everything on it." },
-    { "Scene", "Pick anything in Scene to edit it from the menu, even with the editor closed." },
-    { "Copies", "Copy To Parent copies a prop onto the same parent. Copy As Child attaches the copy to the prop." },
-    { "Map Entities", "Cars and props already in the world join the scene when you move or attach them." },
-    { "Copy And Paste", "Ctrl+C, Ctrl+X, and Ctrl+V copy, cut, and paste. Delete removes the selection." },
-    { "Save", "Save the scene from Saved Scenes, or one prop and its attachments with Save As." },
-    { "Undo", "Ctrl+Z to undo and Ctrl+Y to redo." }
+    {
+        "Fly",
+        Keyboard = "WASD to move, E and Q for up and down. Shift is fast, Alt is slow, and the wheel sets speed.",
+        Controller = "Left stick to move and right stick to look. RB and LB for up and down. L3 is fast and R3 is slow."
+    },
+    { "Spawn", All = "Hover a prop in Spawn Props to preview it. Select it to place it." },
+    { "Select", Keyboard = "Click anything to select it.", Controller = "Aim at anything and press RT to select it." },
+    {
+        "Carry",
+        Keyboard = "Hold click to carry. The wheel sets distance and Space keeps it on the ground.",
+        Controller = "Hold RT to carry. D-pad up and down set distance and holding X keeps it on the ground."
+    },
+    { "Ground", Controller = "Tap X to drop the selection onto the ground." },
+    { "Rotate", Keyboard = "Hold right click and move the mouse to turn and tilt.", Controller = "Hold LT and move the right stick to turn and tilt." },
+    { "Nudge", Keyboard = "With the menu closed, the arrow keys slide the selection.", Controller = "With the menu closed, the D-pad slides the selection." },
+    {
+        "Attach",
+        Keyboard = "Click a prop, Ctrl+click its parent, then press Enter with the menu closed.",
+        Controller = "Select a prop, hold B and press RT on its parent, then press Y with the menu closed."
+    },
+    {
+        "Detach",
+        Keyboard = "Select an attached prop and press Backspace. On a parent, Backspace detaches everything on it.",
+        Controller = "Select an attached prop and press Y with the menu closed."
+    },
+    { "Scene", All = "Pick anything in Scene to edit it from the menu, even with the editor closed." },
+    { "Copies", All = "Copy To Parent copies a prop onto the same parent. Copy As Child attaches the copy to the prop." },
+    { "Map Entities", All = "Cars and props already in the world join the scene when you move or attach them." },
+    {
+        "Copy And Paste",
+        Keyboard = "Ctrl+C, Ctrl+X, and Ctrl+V copy, cut, and paste. Delete removes the selection.",
+        Controller = "Copy, cut, paste, and delete from the Selection menu."
+    },
+    { "Save", All = "Save the scene from Saved Scenes, or one prop and its attachments with Save As." },
+    { "Undo", Keyboard = "Ctrl+Z to undo and Ctrl+Y to redo.", Controller = "Undo and Redo are on the World Editor page." }
 }
 
 local s_HowToView = Submenu.Create("How To", function()
-    for _, line in ipairs(HOW_TO) do Buttons.OptionExtended(line[1], "", "", line[2]) end
+    local device = Input.IsController() and "Controller" or "Keyboard"
+    for _, line in ipairs(HOW_TO) do
+        local text = line.All or line[device]
+        if text then Buttons.OptionExtended(line[1], "", "", text) end
+    end
 end)
 
 local function WorldEditorView()

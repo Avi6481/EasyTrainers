@@ -1,4 +1,6 @@
 local Logger = require("Core/Logger")
+local Input = require("Core/Input")
+local Bindings = require("Controls/Bindings")
 local Draw = require("UI/Core/Draw")
 local Layout = require("UI/Style/Layout")
 local Style = require("UI/Style/Style")
@@ -56,6 +58,26 @@ local CONTROLS_SELECTED_MENU = {
 }
 local CONTROLS_HOLDING = {
     { "WASD", "Move" }, { "Wheel", "Distance" }, { "Right Drag", "Turn / Tilt" }, { "Hold Space", "Ground" }, { "Release", "Drop" }
+}
+
+local XBOX_BUTTONS = {
+    [Input.GP.DPAD_UP] = "D-Pad Up", [Input.GP.DPAD_DOWN] = "D-Pad Down", [Input.GP.DPAD_LEFT] = "D-Pad Left",
+    [Input.GP.DPAD_RIGHT] = "D-Pad Right", [Input.GP.START] = "Start", [Input.GP.BACK] = "Back", [Input.GP.LEFT_STICK] = "L3",
+    [Input.GP.RIGHT_STICK] = "R3", [Input.GP.LEFT_BUMPER] = "LB", [Input.GP.RIGHT_BUMPER] = "RB", [Input.GP.LEFT_TRIGGER] = "LT",
+    [Input.GP.RIGHT_TRIGGER] = "RT", [Input.GP.A] = "A", [Input.GP.B] = "B", [Input.GP.X] = "X", [Input.GP.Y] = "Y"
+}
+local PLAYSTATION_BUTTONS = {
+    [Input.GP.DPAD_UP] = "D-Pad Up", [Input.GP.DPAD_DOWN] = "D-Pad Down", [Input.GP.DPAD_LEFT] = "D-Pad Left",
+    [Input.GP.DPAD_RIGHT] = "D-Pad Right", [Input.GP.START] = "Options", [Input.GP.BACK] = "Share", [Input.GP.LEFT_STICK] = "L3",
+    [Input.GP.RIGHT_STICK] = "R3", [Input.GP.LEFT_BUMPER] = "L1", [Input.GP.RIGHT_BUMPER] = "R1", [Input.GP.LEFT_TRIGGER] = "L2",
+    [Input.GP.RIGHT_TRIGGER] = "R2", [Input.GP.A] = "Cross", [Input.GP.B] = "Circle", [Input.GP.X] = "Square", [Input.GP.Y] = "Triangle"
+}
+local KEY_HINTS = {
+    Detach = "Backspace to detach. Edit its offset in Scene.",
+    Pick = "Ctrl+click what it goes on to attach it.",
+    Release = "Backspace lets go of everything attached to it.",
+    Attach = "Enter to attach the children to the parent.",
+    AttachMenu = "Close the menu, then press Enter to attach."
 }
 
 local MARKER_SIZE = 6
@@ -160,6 +182,33 @@ local function Tagged(tag, color, text)
     return { Segment(tag, color, 0, SELECTION_TAG_WIDTH), Segment(Draw.FitText(text, SELECTION_TEXT_WIDTH), Style.Text) }
 end
 
+local function PadNames()
+    return Input.IsPlayStation() and PLAYSTATION_BUTTONS or XBOX_BUTTONS
+end
+
+local function PadButton(action, names)
+    local binding = Bindings.Actions[action]
+    local parts = {}
+    for _, button in ipairs(binding and binding.btns or {}) do
+        if names[button] then table.insert(parts, names[button]) end
+    end
+    return #parts > 0 and table.concat(parts, " + ") or nil
+end
+
+local function SelectionHints()
+    if not Input.IsController() then return KEY_HINTS end
+    local names = PadNames()
+    local link = PadButton("EDITOR_LINK", names) or "?"
+    local pick = string.format("Hold %s and press %s", PadButton("EDITOR_MULTI", names) or "?", PadButton("EDITOR_SELECT", names) or "?")
+    return {
+        Detach = link .. " to detach. Edit its offset in Scene.",
+        Pick = pick .. " on what it goes on to attach it.",
+        Release = "Detach in Selection lets go of everything attached to it.",
+        Attach = link .. " to attach the children to the parent.",
+        AttachMenu = "Close the menu, then press " .. link .. " to attach."
+    }
+end
+
 local function ShortcutRow()
     return {
         Segment("Ctrl+C", Style.Accent, 6), Segment("Copy", Muted(), COLUMN_GAP),
@@ -171,6 +220,8 @@ end
 local function SelectionRows()
     local selected = Selection.GetAll()
     if #selected == 0 then return {}, nil end
+    local hints = SelectionHints()
+    local shortcuts = not Input.IsController()
 
     if #selected == 1 then
         local only = selected[1]
@@ -178,13 +229,13 @@ local function SelectionRows()
         local entry = Attachments.Get(only.Entity)
         if entry then
             table.insert(rows, Tagged("PARENT", PARENT_COLOR, entry.ParentName))
-            table.insert(rows, { Segment("Backspace to detach. Edit its offset in Scene.", Muted()) })
+            table.insert(rows, { Segment(hints.Detach, Muted()) })
         else
-            table.insert(rows, { Segment("Ctrl+click what it goes on to attach it.", Muted()) })
+            table.insert(rows, { Segment(hints.Pick, Muted()) })
         end
-        if Attachments.HasChildren(only.Entity) then table.insert(rows, { Segment("Backspace lets go of everything attached to it.", Muted()) }) end
+        if Attachments.HasChildren(only.Entity) then table.insert(rows, { Segment(hints.Release, Muted()) }) end
         if not Scene.Contains(only.Entity) then table.insert(rows, { Segment("Not in Scene yet. Moving it adds it.", Muted()) }) end
-        table.insert(rows, ShortcutRow())
+        if shortcuts then table.insert(rows, ShortcutRow()) end
         return rows, CHILD_COLOR
     end
 
@@ -193,9 +244,8 @@ local function SelectionRows()
         local parent = index == #selected
         table.insert(rows, Tagged(parent and "PARENT" or "CHILD", parent and PARENT_COLOR or CHILD_COLOR, entry.Name))
     end
-    local hint = Grab.CanNudge() and "Enter to attach the children to the parent." or "Close the menu, then press Enter to attach."
-    table.insert(rows, { Segment(hint, Style.Accent) })
-    table.insert(rows, ShortcutRow())
+    table.insert(rows, { Segment(Grab.CanNudge() and hints.Attach or hints.AttachMenu, Style.Accent) })
+    if shortcuts then table.insert(rows, ShortcutRow()) end
     return rows, PARENT_COLOR
 end
 
@@ -552,7 +602,60 @@ local function WithPaste(controls)
     return list
 end
 
+local function Add(controls, label, text)
+    if label then table.insert(controls, { label, text }) end
+end
+
+local function PadControls()
+    local names = PadNames()
+    local select = PadButton("EDITOR_SELECT", names)
+    local rotate = PadButton("EDITOR_ROTATE", names)
+    local ground = PadButton("EDITOR_GROUND", names)
+    local link = PadButton("EDITOR_LINK", names)
+    local multi = PadButton("EDITOR_MULTI", names)
+    local turn = rotate and rotate .. " + Right Stick"
+    local pick = multi and select and "Hold " .. multi .. " + " .. select
+    local controls = { { "Left Stick", "Move" } }
+
+    if Grab.IsHolding() then
+        if Grab.CanNudge() then Add(controls, "D-Pad Up / Down", "Distance") end
+        Add(controls, turn, "Turn / Tilt")
+        Add(controls, ground and "Hold " .. ground, "Ground")
+        Add(controls, select and "Release " .. select, "Drop")
+        return controls
+    end
+
+    local selected = Selection.GetAll()
+    if #selected > 1 then
+        Add(controls, link, "Attach To " .. Draw.FitText(selected[#selected].Name, 180))
+        Add(controls, pick, "Add / Remove")
+        Add(controls, select, "Select One")
+        return controls
+    end
+
+    if #selected == 0 then
+        local up, down = PadButton("EDITOR_UP", names), PadButton("EDITOR_DOWN", names)
+        Add(controls, "Right Stick", "Look")
+        Add(controls, up and down and up .. " / " .. down, "Up / Down")
+        Add(controls, PadButton("EDITOR_FAST", names), "Fast")
+        Add(controls, PadButton("EDITOR_SLOW", names), "Slow")
+    else
+        if Grab.CanNudge() then Add(controls, "D-Pad", "Nudge") end
+        Add(controls, turn, "Turn / Tilt")
+        Add(controls, ground, "Ground")
+        if Attachments.IsAttached(selected[1].Entity) then
+            Add(controls, link, "Detach")
+        else
+            Add(controls, pick, "Pick Parent")
+        end
+    end
+    Add(controls, select, "Select")
+    Add(controls, select and "Hold " .. select, "Carry")
+    return controls
+end
+
 local function CurrentControls()
+    if Input.IsController() then return PadControls() end
     if Grab.IsHolding() then return CONTROLS_HOLDING end
     local selected = Selection.GetAll()
     if #selected == 0 then return WithPaste(CONTROLS) end

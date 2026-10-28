@@ -25,6 +25,7 @@ Grab.RotateSpeed = { value = 1.0, min = 0.1, max = 5.0, step = 0.1, unit = "x" }
 local MIN_DISTANCE = 1.5
 local MAX_DISTANCE = 80
 local WHEEL_STEP = 1.12
+local DISTANCE_RATE = 2
 local SETTLE_DELAY = 0.3
 local MOUSE_KEYS = { [Input.VK.LBUTTON] = Mouse.IsDown, [Input.VK.RBUTTON] = Mouse.IsRightDown }
 
@@ -225,9 +226,19 @@ local function ReadRotation(active)
     return yaw * scale, pitch * scale
 end
 
-local function Carry(yaw, pitch, grounded)
+local function NudgeInput()
+    if not Grab.CanNudge() then return 0, 0 end
+    return Axis("EDITOR_ADJUST_FORWARD", "EDITOR_ADJUST_BACKWARD"), Axis("EDITOR_ADJUST_RIGHT", "EDITOR_ADJUST_LEFT")
+end
+
+local function Carry(deltaTime, yaw, pitch, grounded)
     local wheel = InputAllowed() and Mouse.GetWheel() or 0
     if wheel ~= 0 then s_Carry.Distance = Clamp(s_Carry.Distance * (WHEEL_STEP ^ wheel), MIN_DISTANCE, MAX_DISTANCE) end
+    local push = NudgeInput()
+    if push ~= 0 then
+        local scale = DISTANCE_RATE ^ (push * FreeCam.SpeedMultiplier * deltaTime)
+        s_Carry.Distance = Clamp(s_Carry.Distance * scale, MIN_DISTANCE, MAX_DISTANCE)
+    end
 
     local cameraYaw = FreeCam.GetRotation()
     if Grab.KeepFacing.value then yaw = yaw + cameraYaw - s_Carry.CameraYaw end
@@ -253,11 +264,6 @@ local function Carry(yaw, pitch, grounded)
         Notification.Warning("This entity can't be moved.")
         Grab.Drop()
     end
-end
-
-local function NudgeInput()
-    if not Grab.CanNudge() then return 0, 0 end
-    return Axis("EDITOR_ADJUST_FORWARD", "EDITOR_ADJUST_BACKWARD"), Axis("EDITOR_ADJUST_RIGHT", "EDITOR_ADJUST_LEFT")
 end
 
 local function Adjust(deltaTime, yaw, pitch, groundPressed)
@@ -342,7 +348,7 @@ function Grab.Tick(deltaTime)
     s_GroundHeld = ground
 
     if s_Carry then
-        Carry(yaw, pitch, ground)
+        Carry(deltaTime or 0, yaw, pitch, ground)
     else
         Adjust(deltaTime or 0, yaw, pitch, groundPressed)
     end
