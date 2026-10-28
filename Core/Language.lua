@@ -129,7 +129,7 @@ function Language.Tip(key, placeholders)
 end
 
 local EXTRA_KEY_NAMES = {
-    [0x04] = "Mouse 3", [0x05] = "Mouse 4", [0x06] = "Mouse 5",
+    [0x01] = "Left Mouse", [0x02] = "Right Mouse", [0x04] = "Mouse 3", [0x05] = "Mouse 4", [0x06] = "Mouse 5",
     [0x13] = "Pause", [0x14] = "CapsLock", [0x2C] = "Print Screen", [0x90] = "Num Lock", [0x91] = "Scroll Lock",
     [0x6A] = "Num *", [0x6B] = "Num +", [0x6D] = "Num -", [0x6E] = "Num .", [0x6F] = "Num /",
     [0xBA] = ";", [0xBB] = "=", [0xBC] = ",", [0xBD] = "-", [0xBE] = ".", [0xBF] = "/", [0xC0] = "`",

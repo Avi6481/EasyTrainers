@@ -96,6 +96,8 @@ function Input.IsKeyboard()
 end
 
 Input.VK = {
+    LBUTTON = 0x01,
+    RBUTTON = 0x02,
     UP = 0x26,
     DOWN = 0x28,
     LEFT = 0x25,

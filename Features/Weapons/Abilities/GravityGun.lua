@@ -1,4 +1,5 @@
 local AimHelpers = require("Features/Weapons/Abilities/AimHelpers")
+local Physics = require("Utils/Physics")
 
 local GravityGun = {}
 
@@ -8,31 +9,36 @@ local GRAB_DISTANCE = 7.0
 
 local s_Held = nil
 
+local function Release()
+    if not s_Held then return end
+    Physics.Release(s_Held, { Ragdoll = true })
+    s_Held = nil
+end
+
 function GravityGun.Tick()
     if not GravityGun.Enabled.value then
-        s_Held = nil
+        Release()
         return
     end
 
     local player = Game.GetPlayer()
     local targeting = Game.GetTargetingSystem()
-    local teleport = Game.GetTeleportationFacility()
-    if not player or not targeting or not teleport then return end
+    if not player or not targeting then return end
 
     if not player.isAiming then
-        s_Held = nil
+        Release()
         return
     end
 
     if not s_Held then
         local target = targeting:GetLookAtObject(player, true, false)
-        if target and not AimHelpers.IsPlayerOrMount(target) then s_Held = target end
+        if target and not AimHelpers.IsPlayerOrMount(target) then s_Held = Physics.Hold(target) end
     end
     if not s_Held then return end
 
     local direction, origin = AimHelpers.GetAimDirection(player, targeting)
     if not direction then
-        s_Held = nil
+        Release()
         return
     end
 
@@ -43,9 +49,7 @@ function GravityGun.Tick()
         1.0
     )
 
-    local held = s_Held
-    local moved = pcall(function() teleport:Teleport(held, target, EulerAngles.new(0, 0, 0)) end)
-    if not moved then s_Held = nil end
+    if not Physics.Move(s_Held, target, 0) then Release() end
 end
 
 return GravityGun

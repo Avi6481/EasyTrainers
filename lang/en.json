@@ -52,6 +52,10 @@
       "label": "Items Menu",
       "tip": "Browse, search, add, or remove items from a categorized inventory catalog."
     },
+    "worldeditor": {
+      "label": "World Editor",
+      "tip": "Fly a free camera, inspect the world, and build with props."
+    },
     "settingsmenu": {
       "label": "Settings Menu",
       "tip": "Configure EasyTrainer options, navigation, and user interface."

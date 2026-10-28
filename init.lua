@@ -48,6 +48,7 @@ local function LoadModules()
             AutoTeleport = require("Features/Teleports/AutoTeleport"),
             WorldWeather = require("Features/World/WorldWeather"),
             WorldTime = require("Features/World/WorldTime"),
+            WorldEditor = require("Features/WorldEditor"),
             Weapon = require("Utils/Weapon"),
             MainMenu = require("View/MainMenu")
         }
@@ -111,6 +112,7 @@ local function RegisterHooks()
     Event.Observe("PlayerPuppet", "OnAction", function(_, action)
         if not s_Modules then return end
         s_Modules.Self.NoClip.HandleMouseLook(action)
+        s_Modules.WorldEditor.FreeCam.HandleAction(action)
         s_Modules.Weapon.HandleInputAction(action)
     end)
 
@@ -141,6 +143,11 @@ local function RegisterHooks()
     Event.Override("LocomotionTransition", "WantsToDodge", function(transition, stateContext, scriptInterface, wrappedFunc)
         if not s_Modules then return wrappedFunc(stateContext, scriptInterface) end
         return s_Modules.Self.InfiniteAirDash.HandleAirDash(transition, stateContext, scriptInterface, wrappedFunc)
+    end)
+
+    Event.Override("ZoomLevelBaseDecisions", "ToZoomLevelAim", function(transition, stateContext, scriptInterface, wrappedFunc)
+        if s_Modules and s_Modules.WorldEditor.IsActive() then return false end
+        return wrappedFunc(stateContext, scriptInterface)
     end)
 
     Event.Override("gameItemData", "CanDualWield", function(itemData, owner, wrappedMethod)
@@ -197,6 +204,7 @@ Event.RegisterUpdate(function(deltaTime)
     s_Modules.AutoTeleport.Tick(deltaTime)
     s_Modules.WorldWeather.Update()
     s_Modules.WorldTime.Update(deltaTime)
+    s_Modules.WorldEditor.Tick(deltaTime)
 end)
 
 Event.RegisterDraw(function()
@@ -204,7 +212,9 @@ Event.RegisterDraw(function()
     Notification.Render()
     if not s_Modules then return end
 
-    s_Modules.Vehicles.VehicleSpeedometer.Render(s_Session.isPaused or s_Session.isBlurred or not s_Session.isLoaded)
+    local gameMenuOpen = s_Session.isPaused or s_Session.isBlurred or not s_Session.isLoaded
+    s_Modules.WorldEditor.Render(s_DeltaTime, gameMenuOpen)
+    s_Modules.Vehicles.VehicleSpeedometer.Render(gameMenuOpen or s_Modules.WorldEditor.IsActive())
     s_Modules.MainMenu.Initialize()
     Handler.Update()
     s_Modules.MainMenu.Render(s_DeltaTime)

@@ -39,7 +39,29 @@ Bindings.DefaultActions = {
     NOCLIP_LEFT = { keys = { Input.VK.A }, btns = {} },
     NOCLIP_RIGHT = { keys = { Input.VK.D }, btns = {} },
     NITRO = { keys = { Input.VK.SHIFT }, btns = { Input.GP.X } },
-    BLACKWALL_FORCE = { keys = { Input.VK.B }, btns = {} }
+    BLACKWALL_FORCE = { keys = { Input.VK.B }, btns = {} },
+    EDITOR_TOGGLE = { keys = {}, btns = {} },
+    EDITOR_FORWARD = { keys = { Input.VK.W }, btns = {} },
+    EDITOR_BACKWARD = { keys = { Input.VK.S }, btns = {} },
+    EDITOR_LEFT = { keys = { Input.VK.A }, btns = {} },
+    EDITOR_RIGHT = { keys = { Input.VK.D }, btns = {} },
+    EDITOR_UP = { keys = { Input.VK.E }, btns = { Input.GP.RIGHT_BUMPER } },
+    EDITOR_DOWN = { keys = { Input.VK.Q }, btns = { Input.GP.LEFT_BUMPER } },
+    EDITOR_FAST = { keys = { Input.VK.SHIFT }, btns = { Input.GP.LEFT_STICK } },
+    EDITOR_SLOW = { keys = { Input.VK.ALT }, btns = { Input.GP.RIGHT_STICK } },
+    EDITOR_SELECT = { keys = { Input.VK.LBUTTON }, btns = { Input.GP.RIGHT_TRIGGER } },
+    EDITOR_ROTATE = { keys = { Input.VK.RBUTTON }, btns = { Input.GP.LEFT_TRIGGER } },
+    EDITOR_GROUND = { keys = { Input.VK.SPACE }, btns = { Input.GP.X } },
+    EDITOR_MULTI = { keys = { Input.VK.CTRL }, btns = {} },
+    EDITOR_LINK = { keys = { Input.VK.ENTER }, btns = { Input.GP.Y } },
+    EDITOR_COPY = { keys = { Input.VK.CTRL, Input.VK.C }, btns = {} },
+    EDITOR_CUT = { keys = { Input.VK.CTRL, Input.VK.X }, btns = {} },
+    EDITOR_PASTE = { keys = { Input.VK.CTRL, Input.VK.V }, btns = {} },
+    EDITOR_DELETE = { keys = { Input.VK.DELETE }, btns = {} },
+    EDITOR_ADJUST_FORWARD = { keys = { Input.VK.UP }, btns = { Input.GP.DPAD_UP } },
+    EDITOR_ADJUST_BACKWARD = { keys = { Input.VK.DOWN }, btns = { Input.GP.DPAD_DOWN } },
+    EDITOR_ADJUST_LEFT = { keys = { Input.VK.LEFT }, btns = { Input.GP.DPAD_LEFT } },
+    EDITOR_ADJUST_RIGHT = { keys = { Input.VK.RIGHT }, btns = { Input.GP.DPAD_RIGHT } }
 }
 
 Bindings.Actions = {}

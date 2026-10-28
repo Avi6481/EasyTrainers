@@ -2,23 +2,25 @@ local Input = require("Core/Input")
 
 local Mouse = {}
 
-local VK_LBUTTON = 0x01
+local BUTTON_KEYS = { [0] = 0x01, [1] = 0x02 }
 
 local s_Down = false
 local s_WasDown = false
+local s_RightDown = false
 local s_X = 0
 local s_Y = 0
 local s_Wheel = 0
 
-local function ReadDown()
-    local native = Input.IsMouseButtonDown(0)
+local function ReadButton(button)
+    local native = Input.IsMouseButtonDown(button)
     if native ~= nil then return native end
-    return Input.IsKeyDown(VK_LBUTTON) or ImGui.IsMouseDown(0)
+    return Input.IsKeyDown(BUTTON_KEYS[button]) or ImGui.IsMouseDown(button)
 end
 
 function Mouse.Update()
     s_WasDown = s_Down
-    s_Down = ReadDown()
+    s_Down = ReadButton(0)
+    s_RightDown = ReadButton(1)
 
     local x, y = Input.GetMousePosition()
     if x then
@@ -31,6 +33,10 @@ end
 
 function Mouse.IsDown()
     return s_Down
+end
+
+function Mouse.IsRightDown()
+    return s_RightDown
 end
 
 function Mouse.IsClicked()

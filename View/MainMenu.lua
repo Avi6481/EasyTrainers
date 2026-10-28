@@ -23,6 +23,7 @@ local WeatherView = require("View/World/WeatherView")
 local TimeView = require("View/World/TimeView")
 local FactsView = require("View/World/FactView")
 local ItemsView = require("View/Items/ItemBrowserView")
+local WorldEditorView = require("View/WorldEditor/WorldEditorView")
 
 local MainMenu = {}
 
@@ -43,6 +44,7 @@ local function MainView()
     Buttons.Submenu(L("mainmenu.time.label"), TimeView, tip("mainmenu.time.tip"))
     Buttons.Submenu(L("mainmenu.weather.label"), WeatherView, tip("mainmenu.weather.tip"))
     Buttons.Submenu(L("mainmenu.items.label"), ItemsView, tip("mainmenu.items.tip"))
+    Buttons.Submenu(L("mainmenu.worldeditor.label"), WorldEditorView, tip("mainmenu.worldeditor.tip"))
     Buttons.Submenu(L("mainmenu.settingsmenu.label"), SettingsView, tip("mainmenu.settingsmenu.tip"))
 end
 
