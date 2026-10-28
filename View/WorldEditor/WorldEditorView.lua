@@ -14,15 +14,34 @@ local PropSpawner = WorldEditor.PropSpawner
 local Grabbables = WorldEditor.Grabbables
 local Attachments = WorldEditor.Attachments
 local Scene = WorldEditor.Scene
+local Layout = WorldEditor.Layout
 local Clipboard = WorldEditor.Clipboard
+local Saves = WorldEditor.Saves
+local Entities = require("Utils/Entities")
 local Physics = require("Utils/Physics")
 local Rotation = require("Utils/Rotation")
 local PropCatalog = require("Features/WorldEditor/PropCatalog")
+
+local POSITION_WINDOW = 10
 
 local s_Search = { value = "" }
 local s_SearchResults = {}
 local s_ListViews = {}
 local s_CategoryViews = {}
+local s_EditMenus = {}
+local s_ChildMenus = {}
+local s_EntitySaveName = { value = "", capturing = false }
+local s_SaveName = { value = "", capturing = false }
+local s_SaveFocus = nil
+
+local s_Edit = {
+    X = { value = 0, min = -10, max = 10, step = 0.02, unit = "m" },
+    Y = { value = 0, min = -10, max = 10, step = 0.02, unit = "m" },
+    Z = { value = 0, min = -10, max = 10, step = 0.02, unit = "m" },
+    Yaw = { value = 0, min = -180, max = 180, step = 1, unit = "deg" },
+    Pitch = { value = 0, min = -180, max = 180, step = 1, unit = "deg" },
+    Roll = { value = 0, min = -180, max = 180, step = 1, unit = "deg" }
+}
 
 local function RequireEditor(action)
     return function()
@@ -34,99 +53,105 @@ local function RequireEditor(action)
     end
 end
 
+local function UniqueLabels()
+    local seen = {}
+    return function(label)
+        seen[label] = (seen[label] or 0) + 1
+        if seen[label] == 1 then return label end
+        return string.format("%s (%d)", label, seen[label])
+    end
+end
+
 local function CameraSettingsView()
-    Buttons.Float("Move Speed", FreeCam.MoveSpeed, "Base flying speed of the editor camera.")
-    Buttons.Float("Fast Multiplier", FreeCam.FastMultiplier, "Speed multiplier while the fast key is held.")
-    Buttons.Float("Slow Multiplier", FreeCam.SlowMultiplier, "Speed multiplier while the slow key is held.")
-    Buttons.Int("Smoothing", FreeCam.Smoothing, "How quickly the camera eases into and out of movement. Zero moves instantly.")
-    Buttons.Float("Mouse Sensitivity", FreeCam.MouseSensitivity, "How far the camera turns for each mouse movement.")
-    Buttons.Int("Stick Look Speed", FreeCam.StickLookSpeed, "How fast the right stick turns the camera at full tilt.")
-    Buttons.Toggle("Invert Look", FreeCam.InvertLook, "Flip up and down for mouse and right stick look.")
-    Buttons.Int("Field of View", FreeCam.FieldOfView, "Field of view of the editor camera.")
-    Buttons.Float("Blend Time", FreeCam.BlendTime, "How long the view glides between V and the editor camera when it opens and closes. Zero switches instantly.")
-    Buttons.Toggle("Mouse Wheel Speed", FreeCam.WheelAdjustsSpeed, "Scroll the mouse wheel to change the move speed while flying.")
-    Buttons.Int("Stick Deadzone", FreeCam.GamepadDeadzone, "Ignore small left stick movement below this value.")
+    Buttons.Float("Move Speed", FreeCam.MoveSpeed, "Base flying speed.")
+    Buttons.Float("Fast Multiplier", FreeCam.FastMultiplier, "Speed multiplier while Fast is held.")
+    Buttons.Float("Slow Multiplier", FreeCam.SlowMultiplier, "Speed multiplier while Slow is held.")
+    Buttons.Int("Smoothing", FreeCam.Smoothing, "How much the camera eases in and out. 0 is instant.")
+    Buttons.Float("Mouse Sensitivity", FreeCam.MouseSensitivity, "How far the camera turns per mouse movement.")
+    Buttons.Int("Stick Look Speed", FreeCam.StickLookSpeed, "Turn speed at full right stick.")
+    Buttons.Toggle("Invert Look", FreeCam.InvertLook, "Invert up and down look.")
+    Buttons.Int("Field of View", FreeCam.FieldOfView, "Editor camera field of view.")
+    Buttons.Float("Blend Time", FreeCam.BlendTime, "How long the camera blends between V and the editor. 0 is instant.")
+    Buttons.Toggle("Mouse Wheel Speed", FreeCam.WheelAdjustsSpeed, "Use the mouse wheel to change fly speed.")
+    Buttons.Int("Stick Deadzone", FreeCam.GamepadDeadzone, "Ignore left stick movement below this value.")
 end
 
 local function MoveSettingsView()
-    Buttons.Float("Hold Delay", Grab.HoldDelay, "How long the button has to be held before a click turns into carrying.")
-    Buttons.Float("Nudge Speed", Grab.NudgeSpeed, "How fast the nudge keys slide the selected entity. The fast and slow keys still apply.")
-    Buttons.Float("Rotate Speed", Grab.RotateSpeed, "How fast entities turn and tilt while rotating. Hold the slow key for fine turns.")
-    Buttons.Toggle("Keep Facing", Grab.KeepFacing, "Turn carried entities with the camera so they keep facing the same way relative to you.")
-    Buttons.Toggle("Stand Peds On Ground", Grab.SnapPedsToGround, "Put dropped peds straight onto the ground instead of leaving them where they were let go.")
-    Buttons.Toggle("Outline Selection", Selection.Highlight, "Draw an outline around the selected entity.", Selection.RefreshHighlight)
-    Buttons.Toggle("Lead Attached Props", Attachments.LagCompensation, "Move attached props ahead by the parent's speed, so they don't trail behind fast cars.")
-end
-
-local function SpawnSettingsView()
-    Buttons.Toggle("Live Preview", PropSpawner.PreviewEnabled, "Show the highlighted prop floating in front of the camera before you place it.")
-    Buttons.Float("Preview Distance", PropSpawner.PreviewDistance, "How far in front of the camera the preview floats.")
-    Buttons.Toggle("Spin Preview", PropSpawner.PreviewSpin, "Slowly turn the preview so you can see it from every side.")
-    Buttons.Toggle("Keep Props After Reload", WorldEditor.SceneStore.KeepProps, "Save placed props and their attachments, and put them back after loading a save or reloading mods.")
-end
-
-local function PlayerSettingsView()
-    Buttons.Toggle("Hide V", WorldEditor.HidePlayer, "Make V invisible while the editor is open. V comes back when it closes.", WorldEditor.RefreshPlayerVisibility)
-    Buttons.Toggle("Bring V Along", WorldEditor.KeepPlayerNear, "V stays frozen where you left them by default. Turn this on to move V onto the ground behind the camera when it flies far away, so the world keeps loading around you.")
-    Buttons.Int("Bring Along Distance", WorldEditor.FollowDistance, "How far the camera can get from V before V is moved behind it.")
+    Buttons.Float("Hold Delay", Grab.HoldDelay, "How long to hold Select before it picks the entity up.")
+    Buttons.Float("Nudge Speed", Grab.NudgeSpeed, "How fast the arrow keys slide the selection.")
+    Buttons.Float("Rotate Speed", Grab.RotateSpeed, "How fast right click turns and tilts the selection.")
+    Buttons.Toggle("Keep Facing", Grab.KeepFacing, "Turn carried entities with the camera.")
+    Buttons.Toggle("Stand Peds On Ground", Grab.SnapPedsToGround, "Drop peds onto the ground when released.")
+    Buttons.Toggle("Outline Selection", Selection.Highlight, "Outline the selected entity.", Selection.RefreshHighlight)
 end
 
 local function HudSettingsView()
-    Buttons.Toggle("Hide Game HUD", WorldEditor.HideGameHud, "Hide the game's own HUD while the editor is open.")
-    Buttons.Toggle("Info", Hud.ShowInfo, "Show the camera readout in the top left and the target card in the bottom right.")
-    Buttons.Toggle("Debug", Hud.ShowDebug, "Show frame rate, game time, picking mode, and camera status in the top right.")
-    Buttons.Toggle("Crosshair", Hud.ShowCrosshair, "Show the center crosshair. It changes color with what it is pointing at.")
-    Buttons.Toggle("Controls Bar", Hud.ShowControls, "Show the control hints along the bottom of the screen.")
-    Buttons.Toggle("Grab Markers", Hud.ShowGrabMarkers, "Mark the center of every spawned prop in view, so you can see where to aim to grab it.")
-    Buttons.Toggle("Target Box", Hud.ShowTargetBox, "Draw a box around whatever the crosshair is on.")
-    Buttons.Toggle("Attachment Links", Hud.ShowAttachmentLinks, "Draw a line from each attached prop to what it is attached to.")
-    Buttons.Int("Trace Distance", Inspector.TraceDistance, "How far the cursor trace reaches from the camera.")
-    Buttons.Int("Entity Search Range", Picker.SearchRange, "How far around V the fallback picking looks for peds, vehicles, devices, and props.")
+    Buttons.Toggle("Hide Game HUD", WorldEditor.HideGameHud, "Hide the game HUD while the editor is open.")
+    Buttons.Toggle("Info", Hud.ShowInfo, "Show the camera readout and the target card.")
+    Buttons.Toggle("Debug", Hud.ShowDebug, "Show game time, picking mode, and distance to V.")
+    Buttons.Toggle("Crosshair", Hud.ShowCrosshair, "Show the crosshair. Its color changes with the target.")
+    Buttons.Toggle("Controls Bar", Hud.ShowControls, "Show control hints along the bottom.")
+    Buttons.Toggle("Grab Markers", Hud.ShowGrabMarkers, "Mark the center of each spawned prop in view.")
+    Buttons.Toggle("Target Box", Hud.ShowTargetBox, "Draw a box around the target.")
+    Buttons.Toggle("Attachment Links", Hud.ShowAttachmentLinks, "Draw a line from each attached prop to its parent.")
+    Buttons.Int("Trace Distance", Inspector.TraceDistance, "How far the crosshair trace reaches.")
+    Buttons.Int("Entity Search Range", Picker.SearchRange, "How far around V fallback picking looks.")
 end
 
 local function ControlsView()
-    Buttons.Bind("Open Editor", "EDITOR_TOGGLE", "Key or button that opens and closes the World Editor from anywhere.")
+    Buttons.Bind("Open Editor", "EDITOR_TOGGLE", "Open or close the World Editor from anywhere.")
 
     Buttons.Break("Camera")
-    Buttons.Bind("Forward", "EDITOR_FORWARD", "Key used to fly the camera forward.")
-    Buttons.Bind("Backward", "EDITOR_BACKWARD", "Key used to fly the camera backward.")
-    Buttons.Bind("Left", "EDITOR_LEFT", "Key used to fly the camera left.")
-    Buttons.Bind("Right", "EDITOR_RIGHT", "Key used to fly the camera right.")
-    Buttons.Bind("Up", "EDITOR_UP", "Keyboard or controller control used to fly straight up.")
-    Buttons.Bind("Down", "EDITOR_DOWN", "Keyboard or controller control used to fly straight down.")
+    Buttons.Bind("Forward", "EDITOR_FORWARD", "Fly forward.")
+    Buttons.Bind("Backward", "EDITOR_BACKWARD", "Fly backward.")
+    Buttons.Bind("Left", "EDITOR_LEFT", "Fly left.")
+    Buttons.Bind("Right", "EDITOR_RIGHT", "Fly right.")
+    Buttons.Bind("Up", "EDITOR_UP", "Fly up.")
+    Buttons.Bind("Down", "EDITOR_DOWN", "Fly down.")
     Buttons.Bind("Fast", "EDITOR_FAST", "Hold to fly, nudge, and rotate faster.")
-    Buttons.Bind("Slow", "EDITOR_SLOW", "Hold to fly, nudge, and rotate slower for precise placement.")
+    Buttons.Bind("Slow", "EDITOR_SLOW", "Hold to fly, nudge, and rotate slower.")
 
-    Buttons.Break("Moving Things")
-    Buttons.Bind("Select / Carry", "EDITOR_SELECT", "Click an entity to select it. Hold to pick it up and carry it, then release to drop it.")
-    Buttons.Bind("Rotate", "EDITOR_ROTATE", "Hold and move the mouse or right stick. Left and right turns the entity, up and down tips it forward and back.")
-    Buttons.Bind("Multi-Select", "EDITOR_MULTI", "Hold while clicking to add or remove entities from the selection. The last one you add is the parent.")
-    Buttons.Bind("Attach / Detach", "EDITOR_LINK", "Attach the green selected entities to the orange parent. With one attached prop selected, detach it. Works while the trainer menu is closed.")
-    Buttons.Bind("Copy", "EDITOR_COPY", "Copy the selected props you placed. Works while the trainer menu is closed.")
-    Buttons.Bind("Cut", "EDITOR_CUT", "Copy the selected props you placed, then delete them. Works while the trainer menu is closed.")
-    Buttons.Bind("Paste", "EDITOR_PASTE", "Place the copied props where the crosshair is pointing. Works while the trainer menu is closed.")
-    Buttons.Bind("Delete", "EDITOR_DELETE", "Delete the selected props you placed. Works while the trainer menu is closed.")
-    Buttons.Bind("Ground", "EDITOR_GROUND", "Hold while carrying to keep the entity on the ground. Tap with something selected to drop it onto the ground.")
-    Buttons.Bind("Nudge Forward", "EDITOR_ADJUST_FORWARD", "Slide the selected entity away from the camera. Works while the trainer menu is closed.")
-    Buttons.Bind("Nudge Backward", "EDITOR_ADJUST_BACKWARD", "Slide the selected entity toward the camera. Works while the trainer menu is closed.")
-    Buttons.Bind("Nudge Left", "EDITOR_ADJUST_LEFT", "Slide the selected entity to the left. Works while the trainer menu is closed.")
-    Buttons.Bind("Nudge Right", "EDITOR_ADJUST_RIGHT", "Slide the selected entity to the right. Works while the trainer menu is closed.")
+    Buttons.Break("Editing")
+    Buttons.Bind("Select / Carry", "EDITOR_SELECT", "Click to select. Hold to carry, release to drop.")
+    Buttons.Bind("Rotate", "EDITOR_ROTATE", "Hold and move the mouse to turn and tilt the selection.")
+    Buttons.Bind("Multi-Select", "EDITOR_MULTI", "Hold while clicking to add to the selection. The last one is the parent.")
+    Buttons.Bind("Attach / Detach", "EDITOR_LINK", "Attach the selection to the parent, or detach a single attached prop.")
+    Buttons.Bind("Ground", "EDITOR_GROUND", "Hold while carrying to stay on the ground. Tap to drop the selection onto the ground.")
+    Buttons.Bind("Nudge Forward", "EDITOR_ADJUST_FORWARD", "Slide the selection away from the camera.")
+    Buttons.Bind("Nudge Backward", "EDITOR_ADJUST_BACKWARD", "Slide the selection toward the camera.")
+    Buttons.Bind("Nudge Left", "EDITOR_ADJUST_LEFT", "Slide the selection left.")
+    Buttons.Bind("Nudge Right", "EDITOR_ADJUST_RIGHT", "Slide the selection right.")
+
+    Buttons.Break("Shortcuts")
+    Buttons.Bind("Copy", "EDITOR_COPY", "Copy the selection.")
+    Buttons.Bind("Cut", "EDITOR_CUT", "Copy the selection, then delete it.")
+    Buttons.Bind("Paste", "EDITOR_PASTE", "Paste at the crosshair.")
+    Buttons.Bind("Delete", "EDITOR_DELETE", "Delete the selected props.")
+    Buttons.Bind("Detach", "EDITOR_DETACH", "Detach the selection, or everything attached to it.")
+    Buttons.Bind("Undo", "EDITOR_UNDO", "Undo the last change.")
+    Buttons.Bind("Redo", "EDITOR_REDO", "Redo the last undone change.")
 end
 
 local s_CameraSettingsView = Submenu.Create("Camera", CameraSettingsView)
 local s_MoveSettingsView = Submenu.Create("Select & Move", MoveSettingsView)
-local s_SpawnSettingsView = Submenu.Create("Spawning", SpawnSettingsView)
-local s_PlayerSettingsView = Submenu.Create("Player", PlayerSettingsView)
 local s_HudSettingsView = Submenu.Create("HUD", HudSettingsView)
 local s_ControlsView = Submenu.Create("Controls", ControlsView)
 
 local s_SettingsView = Submenu.Create("Settings", function()
-    Buttons.Submenu("Camera", s_CameraSettingsView, "Camera speed, smoothing, look, field of view, and blend time.")
-    Buttons.Submenu("Select & Move", s_MoveSettingsView, "Carry, nudge, and rotate speeds, plus selection outline.")
-    Buttons.Submenu("Spawning", s_SpawnSettingsView, "Live preview options for the prop list.")
-    Buttons.Submenu("Player", s_PlayerSettingsView, "Hide V and choose whether V follows the camera.")
+    Buttons.Submenu("Camera", s_CameraSettingsView, "Speed, smoothing, look, and field of view.")
+    Buttons.Submenu("Select & Move", s_MoveSettingsView, "Carry, nudge, and rotate settings.")
     Buttons.Submenu("HUD", s_HudSettingsView, "Choose what the editor overlay shows.")
-    Buttons.Submenu("Controls", s_ControlsView, "Rebind every World Editor key and button.")
+    Buttons.Submenu("Controls", s_ControlsView, "Rebind World Editor keys.")
+
+    Buttons.Break("Spawning")
+    Buttons.Toggle("Live Preview", PropSpawner.PreviewEnabled, "Preview the hovered prop in front of the camera.")
+    Buttons.Float("Preview Distance", PropSpawner.PreviewDistance, "How far in front of the camera the preview floats.")
+    Buttons.Toggle("Spin Preview", PropSpawner.PreviewSpin, "Slowly spin the preview.")
+
+    Buttons.Break("Player")
+    Buttons.Toggle("Hide V", WorldEditor.HidePlayer, "Hide V while the editor is open.", WorldEditor.RefreshPlayerVisibility)
+    Buttons.Toggle("Bring V Along", WorldEditor.KeepPlayerNear, "Move V behind the camera when it flies far away, so the world keeps loading.")
+    Buttons.Int("Bring Along Distance", WorldEditor.FollowDistance, "How far the camera can get from V before V follows.")
 end)
 
 local function PropSize(bounds)
@@ -147,11 +172,11 @@ local function PropRows(entry, entity, held, pending)
             { Label = "Group", Value = entry.Group },
             { Label = "Type", Value = PropSpawner.CanSpawnMeshes() and "Mesh" or "Mesh, needs EasyTrainerUtility update" },
             { Label = "Size", Value = size },
-            { Label = "Collision", Value = "Box around the prop" }
+            { Label = "Collision", Value = "Editor box" }
         }
     end
 
-    local physics = held and (#held.Bodies > 0 and "Falls and tips over" or "Stays where placed")
+    local physics = held and (#held.Bodies > 0 and "Dynamic" or "Static")
     return {
         { Label = "Group", Value = entry.Group },
         { Label = "Type", Value = ClassName(entity) or pending },
@@ -162,7 +187,7 @@ end
 
 local function SubmitPropInfo(entry)
     local entity, held = PropSpawner.GetPreviewEntity(entry)
-    local pending = PropSpawner.PreviewEnabled.value and "Loading" or "Turn on Live Preview"
+    local pending = PropSpawner.PreviewEnabled.value and "Loading" or "Live Preview is off"
 
     SidePanel.SubmitInfo("prop-record", {
         Eyebrow = string.upper(entry.Category),
@@ -173,7 +198,7 @@ local function SubmitPropInfo(entry)
 end
 
 local function PropOption(entry)
-    local _, data = Buttons.Option(entry.Name, "Select to place it in front of the camera.", function()
+    local _, data = Buttons.Option(entry.Name, "Place this prop in front of the camera.", function()
         if PropSpawner.Place(entry) then Notification.Info("Placed " .. entry.Name .. ".") end
     end)
     if data and data.Visible and (data.Selected or data.Hovered) then
@@ -212,34 +237,23 @@ end
 local s_SearchView = Submenu.Create("Search Results", function()
     PropSpawner.Browse()
     if #s_SearchResults == 0 then
-        Buttons.OptionExtended("No Matches", "", s_Search.value, "Nothing in the prop list matches that search.")
+        Buttons.OptionExtended("No matching props.", "", s_Search.value, "Try a shorter search.")
         return
     end
     for _, entry in ipairs(s_SearchResults) do PropOption(entry) end
 end)
 
 local s_SpawnPropsView = Submenu.Create("Spawn Props", function()
-    Buttons.Text("Search", s_Search, "Type part of a prop name, like chair, barrel, or neon.", function(text)
+    Buttons.Text("Search Props", s_Search, "Search props by name, like chair, barrel, or neon.", function(text)
         s_SearchResults = PropCatalog.Search(text)
     end)
     Buttons.Submenu(string.format("Search Results (%d)", #s_SearchResults), s_SearchView, "Props matching the search.")
 
-    Buttons.Break(string.format("Categories (%d props)", PropCatalog.Count()))
+    Buttons.Break(string.format("Categories (%d)", PropCatalog.Count()))
     for _, category in ipairs(PropCatalog.GetCategories()) do
         Buttons.Submenu(category.Name, CategorySubmenu(category), string.format("%d props.", category.Count))
     end
 end)
-
-local POSITION_WINDOW = 10
-
-local s_Edit = {
-    X = { value = 0, min = -10, max = 10, step = 0.02, unit = "m" },
-    Y = { value = 0, min = -10, max = 10, step = 0.02, unit = "m" },
-    Z = { value = 0, min = -10, max = 10, step = 0.02, unit = "m" },
-    Yaw = { value = 0, min = -180, max = 180, step = 1, unit = "deg" },
-    Pitch = { value = 0, min = -180, max = 180, step = 1, unit = "deg" },
-    Roll = { value = 0, min = -180, max = 180, step = 1, unit = "deg" }
-}
 
 local function SetAngles(angles)
     s_Edit.Yaw.value = angles and angles.yaw or 0
@@ -283,6 +297,7 @@ local function SyncWorld(entity)
 end
 
 local function ApplyLocal(entity)
+    Scene.Touch(entity)
     Attachments.SetLocal(entity, { x = s_Edit.X.value, y = s_Edit.Y.value, z = s_Edit.Z.value }, Rotation.FromQuaternion(EditedOrientation()))
 end
 
@@ -293,108 +308,323 @@ end
 
 local function TransformOptions(entity, attached)
     local apply = attached and function() ApplyLocal(entity) end or function() ApplyWorld(entity) end
-    local frame = attached and "relative to what it is attached to" or "in the world"
-    Buttons.Float("X", s_Edit.X, "Move it along X " .. frame .. ".", apply)
-    Buttons.Float("Y", s_Edit.Y, "Move it along Y " .. frame .. ".", apply)
-    Buttons.Float("Z", s_Edit.Z, "Move it up and down " .. frame .. ".", apply)
-    Buttons.Float("Yaw", s_Edit.Yaw, "Turn it " .. frame .. ".", apply)
-    Buttons.Float("Pitch", s_Edit.Pitch, "Tip it forward and back " .. frame .. ".", apply)
-    Buttons.Float("Roll", s_Edit.Roll, "Tip it side to side " .. frame .. ".", apply)
+    if attached then
+        Buttons.Float("Offset X", s_Edit.X, "Move it left or right relative to the parent.", apply)
+        Buttons.Float("Offset Y", s_Edit.Y, "Move it forward or backward relative to the parent.", apply)
+        Buttons.Float("Offset Z", s_Edit.Z, "Move it up or down relative to the parent.", apply)
+    else
+        Buttons.Float("Position X", s_Edit.X, "Move it along the world X axis.", apply)
+        Buttons.Float("Position Y", s_Edit.Y, "Move it along the world Y axis.", apply)
+        Buttons.Float("Position Z", s_Edit.Z, "Move it up or down.", apply)
+    end
+
+    Buttons.Break("Rotation")
+    Buttons.Float("Pitch", s_Edit.Pitch, "Rotate it around its side-to-side axis.", apply)
+    Buttons.Float("Roll", s_Edit.Roll, "Rotate it around its front-to-back axis.", apply)
+    Buttons.Float("Yaw", s_Edit.Yaw, "Rotate it around its vertical axis.", apply)
 end
 
-local function DeleteFocus(focus)
+local EntityView
+local ChildrenView
+
+local function EditMenu(depth)
+    if not s_EditMenus[depth] then
+        s_EditMenus[depth] = Submenu.Create("Edit", function() EntityView(depth) end)
+    end
+    return s_EditMenus[depth]
+end
+
+local function ChildMenu(depth)
+    if not s_ChildMenus[depth] then
+        s_ChildMenus[depth] = Submenu.Create("Attached Props", function() ChildrenView(depth) end)
+    end
+    return s_ChildMenus[depth]
+end
+
+local function OpenEntity(depth, entity, name)
+    Scene.SetFocus(depth, entity, name)
+    EditMenu(depth).Title = name
+    Selection.Select({ Entity = entity, DisplayName = name, Kind = Physics.Classify(entity) })
+end
+
+local function Indent(depth)
+    if depth == 0 then return "" end
+    return string.rep("    ", depth - 1) .. "  - "
+end
+
+local function EntityRow(depth, entity, name, label)
+    Buttons.Submenu(label, EditMenu(depth), "Edit, copy, or save it.", function()
+        OpenEntity(depth, entity, name)
+    end)
+end
+
+local function Children(entity)
+    local hash = Entities.Hash(entity)
+    local children = {}
+    for _, link in ipairs(Attachments.GetEntries()) do
+        if link.ParentHash == hash then table.insert(children, link) end
+    end
+    return children
+end
+
+local function SaveItems(name, items)
+    local save, skipped = Saves.Save(name, items)
+    if not save then
+        Notification.Warning("Nothing here can be saved. Only listed props and vehicles can.")
+        return
+    end
+    local note = skipped > 0 and string.format(" Skipped %d.", skipped) or ""
+    Notification.Success(string.format("Saved %s (%d props).%s", save.Name, Saves.Count(save), note))
+end
+
+local function Duplicate(depth, focus, mode)
+    local original = focus.Entity
+    local started = Layout.Duplicate(original, focus.Name, mode, function(records)
+        local copy = records[1]
+        if not copy or not copy.Entity then return end
+        local current = Scene.GetFocus(depth)
+        if current and Entities.Same(current.Entity, original) then
+            OpenEntity(depth, copy.Entity, copy.Entry.Name)
+            Notification.Info("Copied " .. focus.Name .. ". Now editing the copy.")
+        else
+            Notification.Info("Copied " .. focus.Name .. ".")
+        end
+    end)
+    if not started then Notification.Warning(focus.Name .. " can't be copied. Only listed props and vehicles can.") end
+end
+
+local function DeleteFocus(depth, focus)
     if PropSpawner.Delete(focus.Entity) then
         Notification.Info("Deleted " .. focus.Name .. ".")
     elseif Scene.Remove(focus.Entity) then
-        Notification.Info(focus.Name .. " removed from the scene. It is still in the world.")
+        Notification.Info("Removed " .. focus.Name .. " from the scene.")
     end
-    Scene.SetFocus(nil)
+    Scene.SetFocus(depth, nil)
 end
 
-local s_EditView = Submenu.Create("Edit", function()
-    local focus = Scene.GetFocus()
+ChildrenView = function(depth)
+    local focus = Scene.GetFocus(depth)
+    local children = focus and Children(focus.Entity) or {}
+    if #children == 0 then
+        Buttons.OptionExtended("No props are attached.", "", "", "Attach something to it first.")
+        return
+    end
+    local label = UniqueLabels()
+    for _, child in ipairs(children) do EntityRow(depth + 1, child.Child, child.Name, label(child.Name)) end
+end
+
+EntityView = function(depth)
+    local focus = Scene.GetFocus(depth)
     if not focus then
-        Buttons.OptionExtended("Gone", "", "", "This entity no longer exists. Go back to the scene list.")
+        Buttons.OptionExtended("This entity is no longer available.", "", "", "Go back to the scene.")
         return
     end
 
     local entity = focus.Entity
-    local entry = Attachments.Get(entity)
-    Buttons.Option("Select In World", "Select it so you can carry, nudge, and rotate it with the editor camera.", function()
-        Selection.Select({ Entity = entity, DisplayName = focus.Name })
+    local link = Attachments.Get(entity)
+    local children = #Children(entity)
+    EditMenu(depth).Title = focus.Name
+
+    if link then
+        Buttons.Submenu("Attached To " .. link.ParentName, EditMenu(depth + 1), "Open the parent.", function()
+            OpenEntity(depth + 1, link.Parent, link.ParentName)
+        end)
+    end
+    if children > 0 then
+        Buttons.Submenu(string.format("Attached Props (%d)", children), ChildMenu(depth), "Props attached to this one.")
+    end
+    if link or children > 0 then Buttons.Break(link and "Offset" or "Position") end
+
+    if link then SyncLocal(entity) else SyncWorld(entity) end
+    TransformOptions(entity, link ~= nil)
+
+    Buttons.Break("Copy")
+    if link then
+        Buttons.Option("Copy To Parent", "Copy it onto the same parent, then edit the copy.", function() Duplicate(depth, focus, "Parent") end)
+    else
+        Buttons.Option("Duplicate", "Copy it in place, then edit the copy.", function() Duplicate(depth, focus) end)
+    end
+    Buttons.Option("Copy As Child", "Copy it and attach the copy to this one, then edit the copy.", function() Duplicate(depth, focus, "Child") end)
+    Buttons.Option("Copy To Clipboard", "Copy it and its attachments for Paste.", function() Clipboard.CopyItems({ focus }) end)
+
+    Buttons.Break("Save")
+    Buttons.Text("Save As", s_EntitySaveName, "Save it and its attachments to Saved Scenes.", function(value)
+        SaveItems(value, { focus })
+        s_EntitySaveName.value = ""
     end)
 
-    if entry then
-        SyncLocal(entity)
-        Buttons.Break("Offset From " .. entry.ParentName)
-        TransformOptions(entity, true)
-        Buttons.Option("Detach", "Let go of it so it stays where it is.", function()
-            Attachments.Detach(entity)
-            Notification.Info(focus.Name .. " detached.")
+    Buttons.Break()
+    if link then
+        Buttons.Option("Detach", "Detach it and leave it where it is.", function()
+            if Attachments.Detach(entity) then Notification.Info("Detached " .. focus.Name .. ".") end
         end)
+    end
+    if PropSpawner.IsPlaced(entity) then
+        Buttons.Option("Delete", "Delete this prop.", function() DeleteFocus(depth, focus) end)
     else
-        SyncWorld(entity)
-        Buttons.Break("Position")
-        TransformOptions(entity, false)
+        Buttons.Option("Remove From Scene", "Remove it from the scene. It stays in the world.", function() DeleteFocus(depth, focus) end)
+    end
+end
+
+local function SceneRows(entries)
+    local byHash, rows, seen = {}, {}, {}
+    for _, entry in ipairs(entries) do
+        local hash = Entities.Hash(entry.Entity)
+        if hash then byHash[hash] = entry end
     end
 
-    Buttons.Break("")
-    local placed = PropSpawner.IsPlaced(entity) ~= nil
-    Buttons.Option(placed and "Delete" or "Remove From Scene", placed and "Despawn this prop." or "Take it off this list. It stays in the world.", function()
-        DeleteFocus(focus)
-    end)
-end)
+    local function Add(entity, name, depth)
+        local hash = Entities.Hash(entity)
+        if not hash or seen[hash] then return end
+        seen[hash] = true
+        local known = byHash[hash]
+        table.insert(rows, { Entity = entity, Name = known and known.Name or name, Depth = depth })
+        for _, link in ipairs(Attachments.GetEntries()) do
+            if link.ParentHash == hash then Add(link.Child, link.Name, depth + 1) end
+        end
+    end
 
-local function EntryLabel(entry)
-    local link = Attachments.Get(entry.Entity)
-    if link then return entry.Name .. "  >  " .. link.ParentName end
-    return entry.Name
+    for _, entry in ipairs(entries) do
+        local link = Attachments.Get(entry.Entity)
+        if not link or not byHash[link.ParentHash] then Add(entry.Entity, entry.Name, 0) end
+    end
+    return rows
 end
 
 local s_SceneView = Submenu.Create("Scene", function()
-    Buttons.Option("Add Selection To Scene", "Put the selected world entities on this list so you can edit them here.", function()
-        local added = 0
-        for _, selected in ipairs(Selection.GetAll()) do
-            if Scene.Add(selected.Entity, selected.Name, selected.Kind) then added = added + 1 end
-        end
-        if added == 0 then Notification.Warning("Select something in the world that isn't on the list yet.") end
-    end)
-    Buttons.Option("Attach Selection", "Attach the green selected entities to the orange one, the last one you Ctrl+clicked.", WorldEditor.LinkSelection)
-    Buttons.Option("Copy Selection", "Copy the selected props you placed, with the attachments between them.", Clipboard.Copy)
-    Buttons.Option("Cut Selection", "Copy the selected props you placed, then delete them.", Clipboard.Cut)
-    Buttons.Option(string.format("Paste (%d)", Clipboard.Count()), "Place the copied props where the crosshair is pointing.", RequireEditor(Clipboard.Paste))
-    Buttons.Option("Delete Selection", "Delete the selected props you placed. Map entities are left alone.", Clipboard.DeleteSelection)
-
-    local entries = Scene.GetAll()
-    local seen = {}
-    Buttons.Break(string.format("In Scene (%d)", #entries))
-    for _, entry in ipairs(entries) do
-        local label = EntryLabel(entry)
-        seen[label] = (seen[label] or 0) + 1
-        if seen[label] > 1 then label = string.format("%s (%d)", label, seen[label]) end
-        Buttons.Submenu(label, s_EditView, "Edit its position, rotation, and attachment.", function()
-            Scene.SetFocus(entry.Entity, entry.Name)
-        end)
+    local rows = SceneRows(Scene.GetAll())
+    if #rows == 0 then
+        Buttons.OptionExtended("Nothing is in the scene yet.", "", "", "Spawn a prop or move something in the world to add it.")
+        return
     end
 
-    Buttons.Break("")
-    Buttons.Option("Detach All", "Let go of every attached prop.", function()
+    local label = UniqueLabels()
+    for _, row in ipairs(rows) do EntityRow(1, row.Entity, row.Name, label(Indent(row.Depth) .. row.Name)) end
+
+    Buttons.Break("Cleanup")
+    Buttons.Option("Detach All", "Detach every attached prop.", function()
         Notification.Info(string.format("Detached %d props.", Attachments.DetachAll()))
     end)
-    Buttons.Option("Delete Last Placed", "Remove the most recently placed prop.", PropSpawner.DeleteLast)
-    Buttons.Option("Delete All Placed", "Remove every prop placed from the prop list.", function()
-        Notification.Info(string.format("Removed %d props.", PropSpawner.DeleteAll()))
+    Buttons.Option("Delete All Placed", "Delete every placed prop.", function()
+        Notification.Info(string.format("Deleted %d props.", PropSpawner.DeleteAll()))
     end)
 end)
 
-local function WorldEditorView()
-    Buttons.Toggle("World Editor", WorldEditor.Enabled, "Detach the camera from V and fly around freely with the editor HUD. Player controls are blocked while it is open.")
-    Buttons.Submenu("Spawn Props", s_SpawnPropsView, "Search or browse the prop list, preview props in front of the camera, and place them.")
-    Buttons.Submenu(string.format("Scene (%d)", #Scene.GetAll()), s_SceneView, "Everything you placed or added. Edit positions, rotations, and attachment offsets.")
+local function AddSelectionToScene()
+    local added = 0
+    for _, selected in ipairs(Selection.GetAll()) do
+        if Scene.Add(selected.Entity, selected.Name, selected.Kind) then added = added + 1 end
+    end
+    if added == 0 then Notification.Warning("Nothing new to add.") end
+end
+
+local s_SelectionView = Submenu.Create("Selection", function()
+    Buttons.Option("Attach", "Attach the selection to the parent, the last one picked.", WorldEditor.LinkSelection)
+    Buttons.Option("Detach", "Detach the selection, or everything attached to it.", WorldEditor.DetachSelection)
+    Buttons.Option("Copy", "Copy the selection and its attachments.", Clipboard.Copy)
+    Buttons.Option("Cut", "Copy the selection, then delete it.", Clipboard.Cut)
+    Buttons.Option(string.format("Paste (%d)", Clipboard.Count()), "Paste at the crosshair, or in front of V with the editor closed.", Clipboard.Paste)
+    Buttons.Option("Delete", "Delete the selected props. Map entities are left alone.", Clipboard.DeleteSelection)
+    Buttons.Option("Add To Scene", "Add the selection to the scene.", AddSelectionToScene)
     Buttons.Option("Clear Selection", "Deselect everything.", Selection.Clear)
-    Buttons.Option("Reset Camera", "Bring the camera back to V's head.", RequireEditor(WorldEditor.ResetCamera))
-    Buttons.Option("Move V Here", "Put V on the ground just behind the camera.", RequireEditor(WorldEditor.TeleportPlayerToCamera))
-    Buttons.Submenu("Settings", s_SettingsView, "Camera, moving, spawning, player, HUD, and control settings.")
+
+    local selected = Selection.GetAll()
+    Buttons.Break(string.format("Selected (%d)", #selected))
+    if #selected == 0 then
+        Buttons.OptionExtended("Nothing is selected.", "", "", "Click something in the editor or pick it from Scene.")
+        return
+    end
+    local label = UniqueLabels()
+    local tip = #selected > 1 and "Attach puts this onto the parent." or "Ctrl+click a parent to attach it."
+    for index, entry in ipairs(selected) do
+        local parent = #selected > 1 and index == #selected
+        Buttons.OptionExtended(label(entry.Name), "", parent and "PARENT" or "", parent and "Attach puts the others onto this one." or tip)
+    end
+end)
+
+local function LoadSave(save, here)
+    local spawned = Saves.Load(save, here)
+    if spawned == 0 then
+        Notification.Error("Couldn't load " .. save.Name .. ".")
+        return
+    end
+    Notification.Info(string.format("Loading %s (%d props).", save.Name, spawned))
+end
+
+local s_SaveView = Submenu.Create("Saved Scene", function()
+    local save = s_SaveFocus
+    if not save then
+        Buttons.OptionExtended("This save was deleted.", "", "", "Go back to Saved Scenes.")
+        return
+    end
+
+    Buttons.Option("Load", "Spawn it where it was saved.", function() LoadSave(save, false) end)
+    Buttons.Option("Load Here", "Spawn it at the crosshair, or in front of V with the editor closed.", function() LoadSave(save, true) end)
+    Buttons.OptionExtended("Props", "", tostring(Saves.Count(save)), "Props and vehicles in this save.")
+
+    Buttons.Break()
+    Buttons.Option("Delete Save", "Delete this save. Spawned props stay.", function()
+        if Saves.Delete(save) then Notification.Info("Deleted " .. save.Name .. ".") end
+        s_SaveFocus = nil
+    end)
+end)
+
+local s_SavesView = Submenu.Create("Saved Scenes", function()
+    Buttons.Text("Save Scene As", s_SaveName, "Save the whole scene. An existing name gets replaced.", function(value)
+        SaveItems(value, Scene.GetAll())
+        s_SaveName.value = ""
+    end)
+
+    local saves = Saves.List()
+    if #saves == 0 then return end
+    local label = UniqueLabels()
+    Buttons.Break(string.format("Saves (%d)", #saves))
+    for _, save in ipairs(saves) do
+        local name = tostring(save.Name)
+        Buttons.Submenu(label(name), s_SaveView, string.format("%d props.", Saves.Count(save)), function()
+            s_SaveFocus = save
+            s_SaveView.Title = name
+        end)
+    end
+end)
+
+local HOW_TO = {
+    { "Fly", "WASD to move, E and Q for up and down. Shift is fast, Alt is slow, and the wheel sets speed." },
+    { "Spawn", "Hover a prop in Spawn Props to preview it. Select it to place it." },
+    { "Select", "Click anything to select it." },
+    { "Carry", "Hold click to carry. The wheel sets distance and Space keeps it on the ground." },
+    { "Rotate", "Hold right click and move the mouse to turn and tilt." },
+    { "Nudge", "With the menu closed, the arrow keys slide the selection." },
+    { "Attach", "Click a prop, Ctrl+click its parent, then press Enter with the menu closed." },
+    { "Detach", "Select an attached prop and press Backspace. On a parent, Backspace detaches everything on it." },
+    { "Scene", "Pick anything in Scene to edit it from the menu, even with the editor closed." },
+    { "Copies", "Copy To Parent copies a prop onto the same parent. Copy As Child attaches the copy to the prop." },
+    { "Map Entities", "Cars and props already in the world join the scene when you move or attach them." },
+    { "Copy And Paste", "Ctrl+C, Ctrl+X, and Ctrl+V copy, cut, and paste. Delete removes the selection." },
+    { "Save", "Save the scene from Saved Scenes, or one prop and its attachments with Save As." },
+    { "Undo", "Ctrl+Z to undo and Ctrl+Y to redo." }
+}
+
+local s_HowToView = Submenu.Create("How To", function()
+    for _, line in ipairs(HOW_TO) do Buttons.OptionExtended(line[1], "", "", line[2]) end
+end)
+
+local function WorldEditorView()
+    Buttons.Toggle("World Editor", WorldEditor.Enabled, "Fly a free camera and edit the world. Player controls are blocked while it's open.")
+    Buttons.Submenu("Spawn Props", s_SpawnPropsView, "Browse and place props.")
+    Buttons.Submenu(string.format("Scene (%d)", Scene.Count()), s_SceneView, "Edit, copy, or save what you placed or moved.")
+    Buttons.Submenu(string.format("Selection (%d)", Selection.Count()), s_SelectionView, "Attach, copy, paste, or delete the selection.")
+    Buttons.Submenu("Saved Scenes", s_SavesView, "Save and load scenes.")
+
+    Buttons.Break()
+    Buttons.Option("Undo", "Undo the last change.", WorldEditor.History.Undo)
+    Buttons.Option("Redo", "Redo the last undone change.", WorldEditor.History.Redo)
+    Buttons.Option("Reset Camera", "Move the camera back to V.", RequireEditor(WorldEditor.ResetCamera))
+    Buttons.Option("Move V Here", "Move V behind the camera.", RequireEditor(WorldEditor.TeleportPlayerToCamera))
+
+    Buttons.Break()
+    Buttons.Submenu("Settings", s_SettingsView, "Camera, movement, spawning, HUD, and controls.")
+    Buttons.Submenu("How To", s_HowToView, "How every editor control works.")
 end
 
 return Submenu.Create("World Editor", WorldEditorView)

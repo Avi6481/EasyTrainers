@@ -7,41 +7,41 @@
   "mainmenu": {
     "title": "Main Menu",
     "self": {
-      "label": "Self Menu",
+      "label": "Self",
       "tip": "Modify player stats, movement, stealth, and health behavior."
     },
     "development": {
-      "label": "Development Menu",
+      "label": "Perks & Attributes",
       "tip": "Adjust attributes and toggle individual perks.",
       "warning": "Adjusting attributes, perks, or proficiencies may alter progression.(It's recommended to save first)"
     },
     "modifiers": {
-      "label": "Modifiers Menu",
+      "label": "Stamina & Cooldowns",
       "tip": "Manage all ability cooldowns and recovery rates such as grenades, cloaking, and quickhacks."
     },
     "teleport": {
-      "label": "Teleport Menu",
+      "label": "Teleports",
       "tip": "Teleport instantly to preset locations in Night City."
     },
     "weapon": {
-      "label": "Weapon Menu",
+      "label": "Weapons",
       "tip": "Access various weapon-related features including special abilities, projectile behavior, and customization."
     },
     "vehicle": {
-      "label": "Vehicle Menu",
+      "label": "Vehicles",
       "tip": "Manage vehicles, spawn new ones, and control vehicle Elements."
     },
     "facts": {
-      "label": "Facts Menu",
+      "label": "Game Facts",
       "tip": "Set story flags, censorship states, and progression facts.",
       "warning": "Adjusting game facts can impact story & endings.(It's recommended to save first)"
     },
     "time": {
-      "label": "Time Menu",
+      "label": "Time",
       "tip": "Control time of day, time skip, freezing, syncing, and speed multipliers."
     },
     "weather": {
-      "label": "Weather Menu",
+      "label": "Weather",
       "tip": "Control world weather, force storms, fog, and more."
     },
     "translations": {
@@ -49,7 +49,7 @@
       "tip": "Change the language used for the trainer's interface."
     },
     "items": {
-      "label": "Items Menu",
+      "label": "Inventory",
       "tip": "Browse, search, add, or remove items from a categorized inventory catalog."
     },
     "worldeditor": {
@@ -57,12 +57,12 @@
       "tip": "Fly a free camera, inspect the world, and build with props."
     },
     "settingsmenu": {
-      "label": "Settings Menu",
+      "label": "Settings",
       "tip": "Configure EasyTrainer options, navigation, and user interface."
     }
   },
   "self": {
-    "title": "Self Menu",
+    "title": "Self",
     "godmode": {
       "label": "God Mode",
       "tip": "Makes you invincible to all forms of damage."
@@ -158,7 +158,7 @@
     }
   },
   "modifiers": {
-    "title": "Player Stats",
+    "title": "Stamina & Cooldowns",
     "custom": {
       "label": "Custom Modifiers (Not Tested Enough)",
       "tip": "Create and manage your own stat modifiers for player, weapons, or vehicles."
@@ -253,7 +253,7 @@
     }
   },
   "playerdev": {
-    "title": "Player Development",
+    "title": "Perks & Attributes",
     "overview": {
       "header": "Overview",
       "level": { "label": "Level", "tip": "Your current character level." },
@@ -662,7 +662,7 @@
     "vehicledetails": "TweakDBID: {id}\nManufacturer: {manufacturer}\nCategory: {category}\nAffiliation: {faction}\nProduction Year: {year}\nDescription: {description}"
   },
   "vehiclemenu": {
-    "title": "Vehicle Menu",
+    "title": "Vehicles",
     "vehiclelist": {
       "label": "Vehicle List",
       "tip": "View all vehicles and toggle which ones are enabled or disabled in your owned vehicle menu."
@@ -757,7 +757,7 @@
     }
   },
   "weaponsmenu": {
-    "title": "Weapons Menu",
+    "title": "Weapons",
     "weaponitems": {
       "label": "Weapon Items",
       "tip": "Add any weapon item to your inventory, including iconic and stash wall variants."
@@ -1034,7 +1034,7 @@
     }
   },
   "gamefacts": {
-    "title": "Game Fact Manager",
+    "title": "Game Facts",
     "category": {
       "label": "Category",
       "tip": "Choose a fact category to view."
@@ -1249,7 +1249,7 @@
     }
   },
   "worldtime": {
-    "title": "World Time",
+    "title": "Time",
     "currenttime24": {
       "label": "Current Time (24H)",
       "tip": "Displays the current in-game time in 24-hour format."
@@ -1344,7 +1344,7 @@
     }
   },
   "worldweather": {
-    "title": "World Weather",
+    "title": "Weather",
     "current": {
       "label": "Current Weather:",
       "tip": "Displays the current in-game weather preset."
@@ -1392,7 +1392,7 @@
     }
   },
   "teleport": {
-    "title": "Teleport Menu",
+    "title": "Teleports",
     "Auto": {
       "AutoWaypointNotification": "Auto-teleported to waypoint.",
       "AutoQuestNotification": "Auto-teleported to quest objective."
@@ -1584,7 +1584,7 @@
     }
   },
   "itemsbrowser": {
-    "title": "Items Menu",
+    "title": "Inventory",
     "search": {
       "title": "Search by ID"
     },

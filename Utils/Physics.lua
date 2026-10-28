@@ -1,6 +1,7 @@
 local Cron = require("Core/cp2077-cet-kit/Cron")
 local Force = require("Utils/Force")
 local Rotation = require("Utils/Rotation")
+local Entities = require("Utils/Entities")
 
 local Physics = {}
 
@@ -32,11 +33,7 @@ local REFRESH_GAP = 0.05
 
 local s_GroundNames = nil
 
-local function Safe(callback)
-    local ok, value = pcall(callback)
-    if ok then return value end
-    return nil
-end
+local Safe = Entities.Safe
 
 local function Is(object, method)
     return Safe(function() return object[method](object) end) == true
@@ -86,10 +83,7 @@ local function StaticCollision(entity)
     return list
 end
 
-local function IsAlive(entity)
-    local id = Safe(function() return entity:GetEntityID() end)
-    return id ~= nil and Safe(function() return Game.FindEntityByID(id) end) ~= nil
-end
+local IsAlive = Entities.IsValid
 
 function Physics.RefreshCollision(entity)
     if not entity or Physics.IsGameObject(entity) then return end
@@ -228,10 +222,7 @@ local function GroundNames()
     return s_GroundNames
 end
 
-local function SameEntity(a, b)
-    local hash = Safe(function() return tostring(a:GetEntityID().hash) end)
-    return hash ~= nil and hash == Safe(function() return tostring(b:GetEntityID().hash) end)
-end
+local SameEntity = Entities.Same
 
 local function IsIgnored(result, ignore)
     if not ignore or not EasyWorldPicker then return false end

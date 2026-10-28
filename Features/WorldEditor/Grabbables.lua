@@ -1,4 +1,5 @@
 local Rotation = require("Utils/Rotation")
+local Entities = require("Utils/Entities")
 
 local Grabbables = {}
 
@@ -11,15 +12,8 @@ local s_Source = nil
 local s_Entries = {}
 local s_Bounds = {}
 
-local function Safe(callback)
-    local ok, value = pcall(callback)
-    if ok then return value end
-    return nil
-end
-
-local function Hash(entity)
-    return Safe(function() return tostring(entity:GetEntityID().hash) end)
-end
+local Safe = Entities.Safe
+local Hash = Entities.Hash
 
 local Rotate = Rotation.Rotate
 local Conjugate = Rotation.Conjugate

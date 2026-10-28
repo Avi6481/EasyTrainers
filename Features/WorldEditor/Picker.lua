@@ -1,4 +1,5 @@
 local Physics = require("Utils/Physics")
+local Entities = require("Utils/Entities")
 
 local Picker = {}
 
@@ -19,11 +20,7 @@ local OCCLUSION_MARGIN = 0.75
 local s_Candidates = {}
 local s_NextCandidates = 0
 
-local function Safe(callback)
-    local ok, value = pcall(callback)
-    if ok then return value end
-    return nil
-end
+local Safe = Entities.Safe
 
 Picker.Classify = Physics.Classify
 

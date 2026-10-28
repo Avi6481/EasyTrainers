@@ -1,3 +1,5 @@
+local Entities = require("Utils/Entities")
+
 local Selection = {}
 
 Selection.Highlight = { value = true }
@@ -7,15 +9,8 @@ local OUTLINE_PARENT = 6
 
 local s_List = {}
 
-local function Safe(callback)
-    local ok, value = pcall(callback)
-    if ok then return value end
-    return nil
-end
-
-local function Hash(entity)
-    return entity and Safe(function() return tostring(entity:GetEntityID().hash) end)
-end
+local Safe = Entities.Safe
+local Hash = Entities.Hash
 
 local function SetOutline(entity, outline)
     if not EasyWorldEditor or not entity then return end
@@ -26,10 +21,7 @@ local function SetOutline(entity, outline)
     end
 end
 
-local function IsValid(entity)
-    local id = Safe(function() return entity:GetEntityID() end)
-    return id ~= nil and Safe(function() return Game.FindEntityByID(id) end) ~= nil
-end
+local IsValid = Entities.IsValid
 
 local function Refresh()
     for index, entry in ipairs(s_List) do

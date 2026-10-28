@@ -11,6 +11,8 @@ local Selection = require("Features/WorldEditor/Selection")
 local Grabbables = require("Features/WorldEditor/Grabbables")
 local Attachments = require("Features/WorldEditor/Attachments")
 local Scene = require("Features/WorldEditor/Scene")
+local Changes = require("Features/WorldEditor/Changes")
+local Entities = require("Utils/Entities")
 
 local Grab = {}
 
@@ -32,11 +34,7 @@ local s_Press = nil
 local s_ButtonHeld = false
 local s_GroundHeld = false
 
-local function Safe(callback)
-    local ok, value = pcall(callback)
-    if ok then return value end
-    return nil
-end
+local Safe = Entities.Safe
 
 local function Clamp(value, minimum, maximum)
     return math.max(minimum, math.min(maximum, value))
@@ -89,14 +87,27 @@ local function ReleaseOptions(entity)
     return { SnapToGround = Grab.SnapPedsToGround.value and not attached, KeepCollision = attached }
 end
 
+local function DisableCollision(entity)
+    if Attachments.IsAttached(entity) then return nil end
+    return Physics.DisableCollision(entity)
+end
+
 local function EndAdjust()
     if not s_Adjust then return end
-    if s_Adjust.Held then Physics.Release(s_Adjust.Held, ReleaseOptions(s_Adjust.Entity)) end
+    Physics.RestoreCollision(s_Adjust.Collision)
+    if s_Adjust.Held then
+        Physics.Release(s_Adjust.Held, ReleaseOptions(s_Adjust.Entity))
+        Changes.Mark()
+    end
+    Attachments.EndMove(s_Adjust.Entity)
     s_Adjust = nil
 end
 
 local function BlockAdjust(message)
+    Physics.RestoreCollision(s_Adjust.Collision)
+    s_Adjust.Collision = nil
     if s_Adjust.Held then Physics.Release(s_Adjust.Held, {}) end
+    Attachments.EndMove(s_Adjust.Entity)
     s_Adjust.Held = nil
     s_Adjust.Blocked = true
     Notification.Warning(message)
@@ -123,7 +134,9 @@ local function BeginAdjust(selected)
         BlockAdjust("This car couldn't be taken out of traffic, so it can't be moved.")
         return nil
     end
+    Attachments.BeginMove(entity)
     s_Adjust.Held = Physics.Hold(entity, selected.Kind)
+    s_Adjust.Collision = DisableCollision(entity)
     Scene.Add(entity, selected.Name, selected.Kind)
     return s_Adjust
 end
@@ -136,13 +149,15 @@ local function StartCarry(target)
         return
     end
 
+    Attachments.BeginMove(entity)
     local position = entity:GetWorldPosition()
     s_Carry = {
         Target = target,
         Held = Physics.Hold(entity, target.Kind),
         Distance = Clamp(Distance(FreeCam.GetPosition(), position), MIN_DISTANCE, MAX_DISTANCE),
         Rotation = EntityRotation(entity),
-        CameraYaw = (FreeCam.GetRotation())
+        CameraYaw = (FreeCam.GetRotation()),
+        Collision = DisableCollision(entity)
     }
     Selection.Select(target)
     Scene.Add(entity, target.DisplayName or target.Record or target.ClassName, target.Kind)
@@ -152,7 +167,10 @@ end
 function Grab.Drop()
     EndAdjust()
     if not s_Carry then return end
+    Physics.RestoreCollision(s_Carry.Collision)
     Physics.Release(s_Carry.Held, ReleaseOptions(s_Carry.Held.Entity))
+    Attachments.EndMove(s_Carry.Held.Entity)
+    Changes.Mark()
     s_Carry = nil
     FreeCam.WheelLocked = false
 end
@@ -161,10 +179,11 @@ function Grab.IsHolding()
     return s_Carry ~= nil
 end
 
-local function SameEntity(a, b)
-    local hash = a and Safe(function() return tostring(a:GetEntityID().hash) end)
-    return hash ~= nil and b ~= nil and hash == Safe(function() return tostring(b:GetEntityID().hash) end)
+function Grab.IsBusy()
+    return s_Carry ~= nil or (s_Adjust ~= nil and not s_Adjust.Blocked)
 end
+
+local SameEntity = Entities.Same
 
 function Grab.IsMoving(entity)
     return (s_Carry ~= nil and SameEntity(s_Carry.Held.Entity, entity)) or (s_Adjust ~= nil and SameEntity(s_Adjust.Entity, entity))

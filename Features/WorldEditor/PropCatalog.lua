@@ -7,6 +7,7 @@ local SEARCH_LIMIT = 200
 
 local s_Categories = nil
 local s_All = nil
+local s_ByHash = nil
 
 local function Load()
     if s_Categories then return end
@@ -57,6 +58,21 @@ end
 function PropCatalog.Count()
     Load()
     return #s_All
+end
+
+function PropCatalog.FindByTemplateHash(hash)
+    if not hash or hash == "" or not EasyEntityTools then return nil end
+    Load()
+    if not s_ByHash then
+        s_ByHash = {}
+        for _, entry in ipairs(s_All) do
+            if entry.Path:sub(-4):lower() == ".ent" then
+                local ok, value = pcall(function() return EasyEntityTools.HashResourcePath(entry.Path) end)
+                if ok and value and value ~= "" then s_ByHash[value] = entry end
+            end
+        end
+    end
+    return s_ByHash[hash]
 end
 
 function PropCatalog.Search(text)

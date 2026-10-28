@@ -14,6 +14,7 @@ local Grabbables = require("Features/WorldEditor/Grabbables")
 local Attachments = require("Features/WorldEditor/Attachments")
 local Scene = require("Features/WorldEditor/Scene")
 local Clipboard = require("Features/WorldEditor/Clipboard")
+local Entities = require("Utils/Entities")
 
 local Hud = {}
 
@@ -38,7 +39,6 @@ local BRACKET_LOCKED = 20
 local BRACKET_LENGTH = 7
 local LOCK_SPEED = 14
 local FADE_SPEED = 10
-local FPS_SMOOTHING = 0.1
 local IDLE_COLOR = 0xB4C8C8C8
 local SHADOW_COLOR = 0xC0000000
 local MUTED_ALPHA = 0.75
@@ -79,17 +79,12 @@ local COLLISION_REFRESH = 0.5
 
 local s_Collision = { Hash = nil, Text = nil, Next = 0 }
 local s_ErrorLogged = false
-local s_Fps = 60
 local s_Lock = 0
 local s_LockColor = IDLE_COLOR
 local s_CardAlpha = 0
 local s_Card = nil
 
-local function Safe(callback)
-    local ok, value = pcall(callback)
-    if ok then return value end
-    return nil
-end
+local Safe = Entities.Safe
 
 local function Muted(alpha)
     return Animation.WithAlpha(Style.TextDisabled, (alpha or 1) * MUTED_ALPHA)
@@ -183,10 +178,11 @@ local function SelectionRows()
         local entry = Attachments.Get(only.Entity)
         if entry then
             table.insert(rows, Tagged("PARENT", PARENT_COLOR, entry.ParentName))
-            table.insert(rows, { Segment("Enter to detach. Edit its offset in Scene.", Muted()) })
+            table.insert(rows, { Segment("Backspace to detach. Edit its offset in Scene.", Muted()) })
         else
             table.insert(rows, { Segment("Ctrl+click what it goes on to attach it.", Muted()) })
         end
+        if Attachments.HasChildren(only.Entity) then table.insert(rows, { Segment("Backspace lets go of everything attached to it.", Muted()) }) end
         if not Scene.Contains(only.Entity) then table.insert(rows, { Segment("Not in Scene yet. Moving it adds it.", Muted()) }) end
         table.insert(rows, ShortcutRow())
         return rows, CHILD_COLOR
@@ -239,7 +235,6 @@ end
 local function DrawDebug(drawList, screenWidth, lineHeight)
     local player = Inspector.Player
     local lines = {
-        string.format("%.0f FPS", s_Fps),
         GameTime(),
         "Picking " .. (Inspector.NativePicking and "Native" or "Estimate"),
         "Camera " .. ActiveCameraText(Inspector.Camera)
@@ -568,30 +563,23 @@ local function CurrentControls()
 
     local controls = {}
     for _, control in ipairs(Grab.CanNudge() and CONTROLS_SELECTED or CONTROLS_SELECTED_MENU) do table.insert(controls, control) end
-    if Attachments.IsAttached(selected[1].Entity) then
-        table.insert(controls, { "Enter", "Detach" })
-    else
-        table.insert(controls, { "Ctrl+Click", "Pick Parent" })
+    if Attachments.IsAttached(selected[1].Entity) or Attachments.HasChildren(selected[1].Entity) then
+        table.insert(controls, { "Backspace", "Detach" })
     end
+    if not Attachments.IsAttached(selected[1].Entity) then table.insert(controls, { "Ctrl+Click", "Pick Parent" }) end
     return WithPaste(controls)
 end
 
 local function DrawControls(drawList, screenWidth, screenHeight, lineHeight)
-    local controls = CurrentControls()
-    local width = 0
-    for _, control in ipairs(controls) do
-        width = width + TextWidth(control[1]) + 6 + TextWidth(control[2]) + COLUMN_GAP
+    local row = {}
+    for _, control in ipairs(CurrentControls()) do
+        table.insert(row, Segment(control[1], Style.Accent, 6))
+        table.insert(row, Segment(control[2], Muted(), COLUMN_GAP))
     end
-    width = width - COLUMN_GAP
 
-    local x = (screenWidth - width) * 0.5
-    local y = screenHeight - MARGIN - lineHeight
-    for _, control in ipairs(controls) do
-        ShadowText(drawList, x, y, Style.Accent, control[1], 0.9)
-        x = x + TextWidth(control[1]) + 6
-        ShadowText(drawList, x, y, Muted(), control[2], 0.9)
-        x = x + TextWidth(control[2]) + COLUMN_GAP
-    end
+    local width = RowWidth(row) + PANEL_PADDING * 2
+    local height = lineHeight + PANEL_PADDING * 2
+    DrawPanel(drawList, { row }, (screenWidth - width) * 0.5, screenHeight - MARGIN - height, lineHeight, false, nil)
 end
 
 local function DrawContents(deltaTime, screenWidth, screenHeight)
@@ -610,7 +598,6 @@ local function DrawContents(deltaTime, screenWidth, screenHeight)
 end
 
 function Hud.Render(deltaTime)
-    if deltaTime and deltaTime > 0 then s_Fps = s_Fps + ((1 / deltaTime) - s_Fps) * FPS_SMOOTHING end
 
     local screenWidth, screenHeight = GetDisplayResolution()
     ImGui.SetNextWindowPos(0, 0, ImGuiCond.Always)

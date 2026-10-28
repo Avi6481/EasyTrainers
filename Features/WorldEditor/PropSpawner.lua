@@ -4,6 +4,10 @@ local Notification = require("UI/Panels/Notification/Notification")
 local FreeCam = require("Features/WorldEditor/FreeCam")
 local Selection = require("Features/WorldEditor/Selection")
 local Grabbables = require("Features/WorldEditor/Grabbables")
+local Tracker = require("Features/WorldEditor/Tracker")
+local Changes = require("Features/WorldEditor/Changes")
+local Attachments = require("Features/WorldEditor/Attachments")
+local Entities = require("Utils/Entities")
 
 local PropSpawner = {}
 
@@ -31,17 +35,12 @@ local s_MeshSupported = nil
 local s_Info = {}
 local s_IsBusy = nil
 local s_OnReplaced = nil
+local s_NextUid = 0
 
-local function Safe(callback)
-    local ok, value = pcall(callback)
-    if ok then return value end
-    return nil
-end
+local Safe = Entities.Safe
 
 local function Hash(value)
-    local direct = Safe(function() return value.hash end)
-    if direct then return tostring(direct) end
-    return Safe(function() return tostring(value:GetEntityID().hash) end)
+    return Entities.IdHash(value) or Entities.Hash(value)
 end
 
 local function Anchor()
@@ -60,8 +59,34 @@ local function Anchor()
         player:GetWorldYaw() + 180
 end
 
+local function NewUid()
+    s_NextUid = s_NextUid + 1
+    return s_NextUid
+end
+
+local function TrackRecord(record)
+    if not record.Entity or not record.Entry then return end
+    local entry = record.Entry
+    Tracker.Set(record.Entity, "Prop", {
+        Entry = {
+            Name = entry.Name,
+            Category = entry.Category,
+            Group = entry.Group,
+            Path = entry.Path,
+            Record = entry.Record,
+            Appearance = entry.Appearance
+        },
+        Uid = record.Uid,
+        Box = record.Box == true
+    })
+end
+
+local function EntryKey(entry)
+    return entry.Path or entry.Record or entry.Name
+end
+
 function PropSpawner.IsMesh(entry)
-    return entry.Path:sub(-5):lower() == ".mesh"
+    return entry.Path ~= nil and entry.Path:sub(-5):lower() == ".mesh"
 end
 
 function PropSpawner.CanSpawnMeshes()
@@ -88,10 +113,11 @@ local function IsBusy(entity)
 end
 
 local function Info(entry)
-    local info = s_Info[entry.Path]
+    local key = EntryKey(entry)
+    local info = s_Info[key]
     if not info then
         info = {}
-        s_Info[entry.Path] = info
+        s_Info[key] = info
     end
     return info
 end
@@ -146,6 +172,13 @@ local function SpawnAt(entry, position, rotation, withBox)
     transform:SetPosition(transform, Vector4.new(position.x, position.y, position.z, 1.0))
     transform:SetOrientation(transform, ToOrientation(rotation))
 
+    if entry.Record then
+        local ok, entityID = pcall(exEntitySpawner.SpawnRecord, TweakDBID.new(entry.Record), transform, entry.Appearance or "")
+        if ok and entityID then return entityID, false end
+        Logger.Log("PropSpawner: failed to spawn record " .. entry.Record .. " (" .. tostring(entityID) .. ")")
+        return nil
+    end
+
     local template, queued, hasBox = entry.Path, false, false
     if PropSpawner.IsMesh(entry) then
         queued, hasBox = QueueSpawn(MESH_TEMPLATE, entry.Path, entry, withBox)
@@ -158,7 +191,12 @@ local function SpawnAt(entry, position, rotation, withBox)
         queued, hasBox = QueueSpawn(entry.Path, "", entry, true)
     end
 
-    local ok, entityID = pcall(exEntitySpawner.Spawn, template, transform)
+    local ok, entityID
+    if entry.Appearance and not PropSpawner.IsMesh(entry) then
+        ok, entityID = pcall(exEntitySpawner.Spawn, template, transform, entry.Appearance)
+    else
+        ok, entityID = pcall(exEntitySpawner.Spawn, template, transform)
+    end
     if not ok or not entityID then
         if queued then Safe(function() EasyWorldEditor.CancelMesh(template) end) end
         Logger.Log("PropSpawner: failed to spawn " .. entry.Path .. " (" .. tostring(entityID) .. ")")
@@ -262,7 +300,10 @@ function PropSpawner.Place(entry)
         if static then Physics.SnapToGround(record.Entity, Grabbables.GetBottom(record.Entity)) end
         record.Held = nil
         record.FoundAt = os.clock()
+        record.Uid = NewUid()
         table.insert(s_Placed, record)
+        TrackRecord(record)
+        Changes.Mark()
         Selection.Select({ Entity = record.Entity, Kind = "Prop", DisplayName = entry.Name, ClassName = "Spawned Prop" })
         return true
     end
@@ -279,7 +320,8 @@ function PropSpawner.Place(entry)
         Notification.Error("Couldn't spawn " .. entry.Name .. ".")
         return false
     end
-    table.insert(s_Placed, { Entry = entry, ID = entityID, Started = os.clock(), SnapOnSpawn = true, Box = hasBox })
+    table.insert(s_Placed, { Entry = entry, ID = entityID, Started = os.clock(), SnapOnSpawn = true, Box = hasBox, Uid = NewUid() })
+    Changes.Mark()
     return true
 end
 
@@ -335,7 +377,9 @@ local function FinishRespawn(record)
     end
 
     record.Entity, record.ID, record.Box, record.Pose, record.Replacement = entity, replacement.ID, replacement.Box, replacement.Pose, nil
+    record.Hash = nil
     if s_OnReplaced then s_OnReplaced(old, entity) end
+    TrackRecord(record)
     DespawnEntity(old)
 end
 
@@ -364,18 +408,18 @@ function PropSpawner.Snapshot()
             local pose = record.Entity and ReadPose(record.Entity)
             if pose then record.LastPose = pose end
             pose = pose or record.LastPose
-            if pose then table.insert(list, { Entry = record.Entry, Entity = record.Entity, Pose = pose }) end
+            if pose then table.insert(list, { Entry = record.Entry, Entity = record.Entity, Pose = pose, Uid = record.Uid }) end
         end
     end
     return list
 end
 
-function PropSpawner.SpawnSaved(entry, position, orientation)
+function PropSpawner.SpawnSaved(entry, position, orientation, uid)
     if not PropSpawner.CanSpawn(entry) then return nil end
     local pose = { Position = position, Orientation = orientation }
     local entityID = SpawnAt(entry, position, orientation, WantsBox(entry, Info(entry)))
     if not entityID then return nil end
-    local record = { Entry = entry, ID = entityID, Started = os.clock(), Pose = pose, LastPose = pose }
+    local record = { Entry = entry, ID = entityID, Started = os.clock(), Pose = pose, LastPose = pose, Uid = uid or NewUid() }
     table.insert(s_Placed, record)
     return record
 end
@@ -406,11 +450,16 @@ function PropSpawner.Count()
     return count
 end
 
+local function RecordHash(record)
+    if not record.Hash then record.Hash = Hash(record.ID) end
+    return record.Hash
+end
+
 function PropSpawner.IsPlaced(entity)
     local hash = entity and Hash(entity)
     if not hash then return nil end
     for index, record in ipairs(s_Placed) do
-        if not record.Orphaned and Hash(record.ID) == hash then return index end
+        if not record.Orphaned and RecordHash(record) == hash then return index end
     end
     return nil
 end
@@ -420,6 +469,26 @@ function PropSpawner.GetEntry(entity)
     return index and s_Placed[index].Entry or nil
 end
 
+function PropSpawner.GetUid(entity)
+    local index = PropSpawner.IsPlaced(entity)
+    return index and s_Placed[index].Uid or nil
+end
+
+function PropSpawner.FindUid(uid)
+    for _, record in ipairs(s_Placed) do
+        if record.Uid == uid and not record.Orphaned then return record end
+    end
+    return nil
+end
+
+function PropSpawner.DeleteUid(uid)
+    local record = PropSpawner.FindUid(uid)
+    if not record then return false end
+    if record.Entity then return PropSpawner.Delete(record.Entity) end
+    record.Orphaned = true
+    return true
+end
+
 function PropSpawner.Delete(entity)
     local index = PropSpawner.IsPlaced(entity)
     if not index then return false end
@@ -427,7 +496,13 @@ function PropSpawner.Delete(entity)
     local selected = Selection.Get()
     if selected and Hash(selected.Entity) == Hash(entity) then Selection.Clear() end
     DropReplacement(record)
-    DespawnEntity(record.Entity or Safe(function() return Game.FindEntityByID(record.ID) end))
+    local target = record.Entity or Safe(function() return Game.FindEntityByID(record.ID) end)
+    if target then
+        Attachments.Unlink(target)
+        Tracker.Remove(target)
+    end
+    DespawnEntity(target)
+    Changes.Mark()
     return true
 end
 
@@ -452,9 +527,12 @@ function PropSpawner.DeleteAll()
             DropReplacement(record)
             local entity = record.Entity or Safe(function() return Game.FindEntityByID(record.ID) end)
             if entity then
+                Attachments.Unlink(entity)
+                Tracker.Remove(entity)
                 DespawnEntity(entity)
                 table.remove(s_Placed, index)
                 removed = removed + 1
+                Changes.Mark()
             else
                 record.Orphaned = true
             end
@@ -480,6 +558,7 @@ function PropSpawner.Tick(deltaTime)
                 record.Entity = Safe(function() return Game.FindEntityByID(record.ID) end)
                 if record.Entity then
                     record.FoundAt = os.clock()
+                    TrackRecord(record)
                     if record.SnapOnSpawn then Physics.SnapToGround(record.Entity, Grabbables.GetBottom(record.Entity)) end
                 end
             elseif record.Entry then
@@ -490,10 +569,28 @@ function PropSpawner.Tick(deltaTime)
     SettleOrphans()
 end
 
+function PropSpawner.Adopt(entity, entry, uid, box)
+    if not entity or not entry or PropSpawner.IsPlaced(entity) then return nil end
+    local pose = ReadPose(entity)
+    local record = {
+        Entry = entry,
+        ID = entity:GetEntityID(),
+        Entity = entity,
+        Started = os.clock(),
+        FoundAt = os.clock(),
+        Uid = uid or NewUid(),
+        Box = box == true,
+        Pose = pose,
+        LastPose = pose
+    }
+    if record.Uid > s_NextUid then s_NextUid = record.Uid end
+    table.insert(s_Placed, record)
+    return record
+end
+
 function PropSpawner.Shutdown()
     ClearPreview()
     s_Requested = nil
-    PropSpawner.DeleteAll()
 end
 
 function PropSpawner.Forget()

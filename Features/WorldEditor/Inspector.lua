@@ -2,6 +2,9 @@ local Physics = require("Utils/Physics")
 local FreeCam = require("Features/WorldEditor/FreeCam")
 local Picker = require("Features/WorldEditor/Picker")
 local Grabbables = require("Features/WorldEditor/Grabbables")
+local PropSpawner = require("Features/WorldEditor/PropSpawner")
+local Scene = require("Features/WorldEditor/Scene")
+local Entities = require("Utils/Entities")
 
 local Inspector = {}
 
@@ -24,11 +27,7 @@ local s_NextRefresh = 0
 local s_GroupNames = {}
 local s_NativeChecked = false
 
-local function Safe(callback)
-    local ok, value = pcall(callback)
-    if ok then return value end
-    return nil
-end
+local Safe = Entities.Safe
 
 local function Copy(vector)
     if not vector then return nil end
@@ -133,10 +132,11 @@ local function RecordName(object)
     return text
 end
 
-local function EntityHash(object)
-    local id = Safe(function() return object:GetEntityID() end)
-    if not id then return nil end
-    return Safe(function() return tostring(id.hash) end)
+local EntityHash = Entities.Hash
+
+local function KnownName(object)
+    local entry = PropSpawner.GetEntry(object)
+    return entry and entry.Name or Scene.GetName(object)
 end
 
 local function DescribeEntity(object, kind, camera)
@@ -147,7 +147,7 @@ local function DescribeEntity(object, kind, camera)
         Entity = object,
         Kind = kind,
         ClassName = NameString(Safe(function() return object:GetClassName() end)) or "Unknown",
-        DisplayName = displayName ~= "" and displayName or nil,
+        DisplayName = (displayName ~= nil and displayName ~= "" and displayName) or KnownName(object),
         Record = RecordName(object),
         Appearance = NameString(Safe(function() return object:GetCurrentAppearanceName() end)),
         EntityHash = EntityHash(object),
@@ -191,11 +191,7 @@ local function ReadTarget(camera, hits)
     return nil
 end
 
-local function SameEntity(a, b)
-    local hashA = Safe(function() return tostring(a:GetEntityID().hash) end)
-    local hashB = Safe(function() return tostring(b:GetEntityID().hash) end)
-    return hashA ~= nil and hashA == hashB
-end
+local SameEntity = Entities.Same
 
 local function PickByBounds(camera, hits, target)
     local nearest = hits[1]
@@ -203,7 +199,6 @@ local function PickByBounds(camera, hits, target)
     local entity, distance = Grabbables.Pick(camera.Position, camera.Forward, limit)
     if not entity then return target end
     if target and target.Entity and SameEntity(target.Entity, entity) then return target end
-    if target and target.Distance and target.Distance < distance then return target end
 
     local picked = DescribeEntity(entity, Picker.Classify(entity), camera)
     picked.Distance = distance

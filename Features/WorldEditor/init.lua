@@ -15,8 +15,11 @@ local PropSpawner = require("Features/WorldEditor/PropSpawner")
 local Grabbables = require("Features/WorldEditor/Grabbables")
 local Attachments = require("Features/WorldEditor/Attachments")
 local Scene = require("Features/WorldEditor/Scene")
-local SceneStore = require("Features/WorldEditor/SceneStore")
+local Tracker = require("Features/WorldEditor/Tracker")
+local Layout = require("Features/WorldEditor/Layout")
 local Clipboard = require("Features/WorldEditor/Clipboard")
+local Saves = require("Features/WorldEditor/Saves")
+local History = require("Features/WorldEditor/History")
 
 local WorldEditor = {}
 
@@ -35,16 +38,21 @@ WorldEditor.PropSpawner = PropSpawner
 WorldEditor.Grabbables = Grabbables
 WorldEditor.Attachments = Attachments
 WorldEditor.Scene = Scene
-WorldEditor.SceneStore = SceneStore
+WorldEditor.Layout = Layout
 WorldEditor.Clipboard = Clipboard
+WorldEditor.Saves = Saves
+WorldEditor.History = History
 
 Grabbables.SetSource(PropSpawner.GetEntities)
-Scene.SetPlacedSource(PropSpawner.GetPlaced)
-Attachments.SetBusyCheck(Grab.IsMoving)
+Scene.SetPlacedSource(PropSpawner.GetPlaced, PropSpawner.IsPlaced)
 PropSpawner.SetBusyCheck(function(entity)
     return Grab.IsMoving(entity) or Attachments.IsAttached(entity) or Scene.IsEditing(entity)
 end)
+History.SetBusyCheck(function()
+    return Grab.IsBusy() or Scene.IsEditingAny() or Layout.IsBusy()
+end)
 PropSpawner.SetReplaceListener(function(old, new)
+    Tracker.Replace(old, new)
     Attachments.Replace(old, new)
     Selection.Replace(old, new)
     Scene.Replace(old, new)
@@ -77,6 +85,7 @@ local s_Active = false
 local s_GameHudHidden = false
 local s_ToggleHeld = false
 local s_LinkHeld = false
+local s_Adopted = false
 local s_ShortcutsHeld = {}
 local s_NextFollow = 0
 local s_HiddenPlayerParts = nil
@@ -235,7 +244,7 @@ end
 function WorldEditor.LinkSelection()
     local selected = Selection.GetAll()
     if #selected == 0 then
-        Notification.Warning("Click a prop, Ctrl+click what it goes on, then press Enter.")
+        Notification.Warning("Click a prop, Ctrl+click its parent, then press Enter.")
         return
     end
 
@@ -244,7 +253,7 @@ function WorldEditor.LinkSelection()
         if Attachments.Detach(only.Entity) then
             Notification.Info(only.Name .. " detached.")
         else
-            Notification.Warning("Ctrl+click a second entity to attach " .. only.Name .. " to it.")
+            Notification.Warning("Ctrl+click a parent for " .. only.Name .. ".")
         end
         return
     end
@@ -273,6 +282,19 @@ function WorldEditor.LinkSelection()
     Selection.Select({ Entity = lastChild.Entity, Kind = lastChild.Kind, DisplayName = lastChild.Name, EntityHash = lastChild.EntityHash })
 end
 
+function WorldEditor.DetachSelection()
+    local detached = 0
+    for _, selected in ipairs(Selection.GetAll()) do
+        if Attachments.Detach(selected.Entity) then detached = detached + 1 end
+        detached = detached + Attachments.DetachChildrenOf(selected.Entity)
+    end
+    if detached == 0 then
+        Notification.Warning("Select an attached prop or its parent first.")
+        return
+    end
+    Notification.Info(string.format("Detached %d prop%s.", detached, detached == 1 and "" or "s"))
+end
+
 local function ShortcutsAllowed()
     return not State.MenuOpen and not State.BindingKey and not State.TypingEnabled and not State.MouseEnabled
 end
@@ -287,7 +309,10 @@ local SHORTCUTS = {
     { Action = "EDITOR_COPY", Run = Clipboard.Copy },
     { Action = "EDITOR_CUT", Run = Clipboard.Cut },
     { Action = "EDITOR_PASTE", Run = Clipboard.Paste },
-    { Action = "EDITOR_DELETE", Run = Clipboard.DeleteSelection }
+    { Action = "EDITOR_DELETE", Run = Clipboard.DeleteSelection },
+    { Action = "EDITOR_DETACH", Run = WorldEditor.DetachSelection },
+    { Action = "EDITOR_UNDO", Run = History.Undo },
+    { Action = "EDITOR_REDO", Run = History.Redo }
 }
 
 local function UpdateShortcuts()
@@ -299,28 +324,63 @@ local function UpdateShortcuts()
     end
 end
 
+local function AdoptTracked()
+    s_Adopted = true
+    local items = Tracker.Load()
+    if #items == 0 then return end
+
+    for _, item in ipairs(items) do
+        local prop = item.Data.Prop
+        if prop and prop.Entry then PropSpawner.Adopt(item.Entity, prop.Entry, prop.Uid, prop.Box) end
+    end
+
+    local links = {}
+    for _, item in ipairs(items) do
+        local scene = item.Data.Scene
+        if scene then Scene.Add(item.Entity, scene.Name, scene.Kind) end
+        if item.Data.Link then table.insert(links, item) end
+    end
+
+    local attached = 0
+    for _, item in ipairs(links) do
+        local link = item.Data.Link
+        local parent = Tracker.FindById(link.Parent)
+        if parent and link.Position and link.Rotation
+            and Attachments.Attach(item.Entity, parent, { Name = link.Name, ParentName = link.ParentName }, link.Position, link.Rotation) then
+            attached = attached + 1
+        else
+            Tracker.Set(item.Entity, "Link", nil)
+        end
+    end
+    Logger.Log(string.format("WorldEditor: picked up %d tracked entities and %d attachments", #items, attached))
+end
+
 function WorldEditor.Tick(deltaTime)
     UpdateToggleKey()
+    if not s_Adopted and Game.GetPlayer() then
+        AdoptTracked()
+        History.Rebase()
+    end
     PropSpawner.Tick(deltaTime)
-    SceneStore.Tick()
-    Clipboard.Tick()
+    Layout.Tick()
+    Attachments.Tick()
+    Selection.Tick()
+    Scene.Tick()
+    History.Tick()
 
     if not WorldEditor.Enabled.value then
         Stop()
-        Attachments.Tick(deltaTime)
         return
     end
 
     if not s_Active and not Start() then
         WorldEditor.Enabled.value = false
-        Attachments.Tick(deltaTime)
         return
     end
 
     if not FreeCam.IsActive() then
         WorldEditor.Enabled.value = false
         Stop()
-        Attachments.Tick(deltaTime)
         return
     end
 
@@ -328,11 +388,8 @@ function WorldEditor.Tick(deltaTime)
     Grab.Tick(deltaTime)
     UpdateLinkKey()
     UpdateShortcuts()
-    Attachments.Tick(deltaTime)
     UpdatePlayerFollow()
     Inspector.Refresh()
-    Selection.Tick()
-    Scene.Tick()
 end
 
 function WorldEditor.Render(deltaTime, gameMenuOpen)
@@ -347,8 +404,9 @@ Lifecycle.Register("WorldEditor", {
     OnSessionEnd = function()
         s_HiddenPlayerParts = nil
         Grab.Forget()
-        SceneStore.Forget()
-        Clipboard.Forget()
+        Tracker.Forget()
+        Layout.Forget()
+        History.Forget()
         Attachments.Forget()
         Scene.Forget()
         PropSpawner.Forget()
@@ -359,12 +417,12 @@ Lifecycle.Register("WorldEditor", {
         WorldEditor.Enabled.value = false
         s_Active = false
         s_GameHudHidden = false
+        s_Adopted = false
     end,
     OnShutdown = function()
-        SceneStore.Save(true)
         WorldEditor.Enabled.value = false
         Stop()
-        Attachments.DetachAll()
+        Attachments.Shutdown()
         PropSpawner.Shutdown()
     end
 })
