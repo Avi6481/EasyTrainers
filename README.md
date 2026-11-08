@@ -15,7 +15,7 @@ A trainer menu for Cyberpunk 2077, built on Cyber Engine Tweaks. Works with keyb
 - World Editor - free camera, pick up and move anything, spawn props and vehicles, attach things together
 - Settings - themes, layout, navigation, hotkeys and language
 
-Nothing the trainer does is written into your saves. Turn an option off and the game's own values come back.
+Most options apply live and switch off cleanly. Changes to your character, items, money, garage, tuning and game facts are real game changes and get saved with your game, so back up your save before trying things.
 
 ## Requirements
 
@@ -45,4 +45,4 @@ Pull requests are welcome. For a translation, copy `lang/en.json`, translate the
 
 ## Credits
 
-- Teleport locations (`Data/Locations.json`) by LocationKingGRP, used with permission.
+- Teleport locations (`Data/Locations.json`) by LocationKingGRP.
