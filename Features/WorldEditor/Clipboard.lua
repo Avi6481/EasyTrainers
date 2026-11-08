@@ -1,5 +1,5 @@
-local Notification = require("UI/Panels/Notification/Notification")
-local Input = require("Core/Input")
+local State = require("Core/State")
+local Notify = require("Utils/Notify")
 local Selection = require("Features/WorldEditor/Selection")
 local PropSpawner = require("Features/WorldEditor/PropSpawner")
 local Layout = require("Features/WorldEditor/Layout")
@@ -8,8 +8,12 @@ local Clipboard = {}
 
 local s_Layout = nil
 
-local function Plural(count, word)
-    return count == 1 and ("1 " .. word) or (count .. " " .. word .. "s")
+local function Count(key, count)
+    return tip(key .. (count == 1 and ".one" or ".many"), { count = count })
+end
+
+local function IsController()
+    return State.Device.Device == State.Devices.Controller
 end
 
 function Clipboard.Count()
@@ -23,13 +27,14 @@ end
 function Clipboard.CopyItems(items)
     local layout, skipped = Layout.Capture(Layout.WithChildren(items))
     if #layout.Items == 0 then
-        Notification.Warning("Only listed props and vehicles can be copied.")
+        Notify.Warning(L("notify.worldeditor.copy.none"))
         return false
     end
 
     s_Layout = layout
-    local note = skipped > 0 and string.format(" Skipped %s that can't be copied.", Plural(skipped, "entity")) or ""
-    Notification.Info("Copied " .. Plural(#layout.Items, "prop") .. "." .. note)
+    local text = Count("notify.worldeditor.copy.done", #layout.Items)
+    if skipped > 0 then text = text .. " " .. Count("notify.worldeditor.copy.skipped", skipped) end
+    Notify.Info(text)
     return true
 end
 
@@ -37,48 +42,59 @@ function Clipboard.Copy()
     return Clipboard.CopyItems(Selection.GetAll())
 end
 
-function Clipboard.Cut()
-    local items = Layout.WithChildren(Selection.GetAll())
+function Clipboard.CutItems(items)
+    items = Layout.WithChildren(items)
     if not Clipboard.CopyItems(items) then return end
     local kept = 0
     for _, item in ipairs(items) do
         if not PropSpawner.Delete(item.Entity) then kept = kept + 1 end
     end
     Selection.Clear()
-    if kept > 0 then Notification.Info("Map entities were copied and left in place.") end
+    if kept > 0 then Notify.Info(L("notify.worldeditor.cut.kept")) end
 end
 
-function Clipboard.DeleteSelection()
+function Clipboard.Cut()
+    Clipboard.CutItems(Selection.GetAll())
+end
+
+function Clipboard.DeleteItems(items)
     local removed, skipped = 0, 0
-    local selected = {}
-    for _, entry in ipairs(Selection.GetAll()) do table.insert(selected, entry.Entity) end
-    for _, entity in ipairs(selected) do
+    local entities = {}
+    for _, item in ipairs(items) do table.insert(entities, item.Entity) end
+    for _, entity in ipairs(entities) do
         if PropSpawner.Delete(entity) then removed = removed + 1 else skipped = skipped + 1 end
     end
     Selection.Clear()
     if removed == 0 then
-        Notification.Warning("Only props you placed can be deleted.")
+        Notify.Warning(L("notify.worldeditor.delete.none"))
         return
     end
-    local note = skipped > 0 and " Map entities were left alone." or ""
-    Notification.Info("Deleted " .. Plural(removed, "prop") .. "." .. note)
+    local text = Count("notify.worldeditor.delete.done", removed)
+    if skipped > 0 then text = text .. " " .. L("notify.worldeditor.delete.kept") end
+    Notify.Success(text)
 end
 
-function Clipboard.Paste()
+function Clipboard.DeleteSelection()
+    Clipboard.DeleteItems(Selection.GetAll())
+end
+
+function Clipboard.PasteAt(target)
     if not s_Layout then
-        Notification.Warning(Input.IsController() and "Nothing copied yet. Copy something from Selection first."
-            or "Nothing copied yet. Select props and press Ctrl+C.")
+        Notify.Warning(L(IsController() and "notify.worldeditor.paste.empty.controller" or "notify.worldeditor.paste.empty.keyboard"))
         return
     end
-    local target = Layout.Target()
     if not target then return end
 
     local spawned = Layout.Spawn(s_Layout, Layout.OffsetTo(s_Layout, target), { OnDone = Layout.SelectRoot })
     if spawned == 0 then
-        Notification.Error("Couldn't paste those props.")
+        Notify.Error(L("notify.worldeditor.paste.failed"))
         return
     end
-    Notification.Info("Pasted " .. Plural(spawned, "prop") .. ".")
+    Notify.Success(Count("notify.worldeditor.paste.done", spawned))
+end
+
+function Clipboard.Paste()
+    Clipboard.PasteAt(Layout.Target())
 end
 
 return Clipboard

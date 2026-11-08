@@ -1,55 +1,82 @@
-local Buttons = require("UI/Options/Buttons")
-local Submenu = require("UI/Navigation/Submenu")
-local Notification = require("UI/Panels/Notification/Notification")
-local StatusEffect = require("Utils/StatusEffect")
-local StatModifiers = require("Utils/StatModifiers")
-local Bindings = require("Controls/Bindings")
-local NavigationConfig = require("Config/NavigationConfig")
-local UIConfig = require("Config/UIConfig")
-local BindingsConfig = require("Config/BindingsConfig")
-local OptionConfig = require("Config/OptionConfig")
-
-local AppearanceView = require("View/Settings/AppearanceView")
-local NavigationView = require("View/Settings/NavigationView")
-local NotificationView = require("View/Settings/NotificationView")
-local TranslationsView = require("View/Settings/TranslationsView")
-local AboutView = require("View/Settings/AboutView")
+local InputBlock = require("Core/InputBlock")
+local Language = require("Core/Language")
+local Settings = require("Features/Settings/Settings")
+local Hotkeys = require("Features/Hotkeys/Hotkeys")
+local Theme = require("Style/Theme")
+local Submenu = require("Navigation/Submenu")
+local Widgets = require("Widgets/Widgets")
+local FooterStyle = require("Panels/Footer/FooterStyle")
+local Notification = require("Panels/Notification/Notification")
 local HotkeysView = require("View/Settings/HotkeysView")
+local TrainerEffectsView = require("View/Settings/TrainerEffectsView")
+local ThemeView = require("View/Settings/ThemeView")
+local LayoutView = require("View/Settings/LayoutView")
+local NavigationView = require("View/Settings/NavigationView")
 local BlockedControlsView = require("View/Settings/BlockedControlsView")
+local NotificationsView = require("View/Settings/NotificationsView")
+local LanguageView = require("View/Settings/LanguageView")
+local AboutView = require("View/Settings/AboutView")
 
-local function SaveAll()
-    UIConfig.Save()
-    NavigationConfig.Save()
-    BindingsConfig.Save()
-    OptionConfig.Save()
+local SettingsView = {}
+
+local s_Counts = {}
+local s_ThemeKeys = {}
+local s_LanguageCode = nil
+local s_LanguageName = nil
+
+local function Link(key, submenu, badge)
+    Widgets.SubmenuButton(L(key .. ".label"), submenu, badge)
+    Widgets.Tip(L(key .. ".tip"))
 end
 
-local function ResetAll()
-    NavigationConfig.Reset()
-    Bindings.ResetAll()
+local function OnOff(enabled)
+    return L(enabled and "hotkeys.info.on" or "hotkeys.info.off")
 end
 
-local function ClearTrainerEffects()
-    StatusEffect.ClearAll()
-    local count = StatModifiers.RemoveAll()
-    Notification.Success(string.format("Removed trainer effects and %d modifier groups", count), 3)
+local function BoundCount()
+    local count = #Hotkeys.Bound()
+    if count == 0 then return nil end
+    if not s_Counts[count] then s_Counts[count] = tostring(count) end
+    return s_Counts[count]
 end
 
-local function SettingsView()
-    Buttons.Submenu(L("settingsmenu.navigation.label"), NavigationView, tip("settingsmenu.navigation.tip"))
-    Buttons.Submenu("Hotkeys", HotkeysView, "Assign keyboard or controller hotkeys to toggles and one-shot actions like Repair Vehicle or Clear Wanted Level.")
-    Buttons.Submenu("Blocked Controls", BlockedControlsView, "Choose which game controls are blocked while the menu is open, closed, in mouse mode, or typing.")
-    Buttons.Submenu(L("settingsmenu.translations.label"), TranslationsView, tip("settingsmenu.translations.tip"))
-    Buttons.Submenu("Appearance", AppearanceView, "Layout and colors for the menu.")
-    Buttons.Submenu(L("settingsmenu.notifications.label"), NotificationView, tip("settingsmenu.notifications.tip"))
-    Buttons.Submenu("About", AboutView, "Version, credits, and project information.")
-
-    Buttons.Break("Configuration")
-    Buttons.Option(L("settingsmenu.saveall.label"), tip("settingsmenu.saveall.tip"), SaveAll)
-    Buttons.Option(L("settingsmenu.resetall.label"), tip("settingsmenu.resetall.tip"), ResetAll)
-
-    Buttons.Break("Save Safety")
-    Buttons.Option("Clear Trainer Effects", "Removes every status effect and stat modifier the trainer applied. Toggles that are still on apply again on the next frame.", ClearTrainerEffects)
+local function ThemeName()
+    local theme = Theme.List()[Theme.Index()]
+    if not theme then return nil end
+    if not s_ThemeKeys[theme.Id] then s_ThemeKeys[theme.Id] = "themes." .. theme.Id .. ".label" end
+    return L(s_ThemeKeys[theme.Id])
 end
 
-return Submenu.Create("settingsmenu.title", SettingsView)
+local function LanguageName()
+    local code = Language.GetCurrentCode()
+    if s_LanguageCode ~= code then
+        s_LanguageCode = code
+        s_LanguageName = Language.GetCurrentName()
+    end
+    return s_LanguageName
+end
+
+local function Links()
+    Link("settings.hotkeys", HotkeysView.Menu, BoundCount())
+    Widgets.Info(HotkeysView.BoundInfo)
+    Link("settings.effects", TrainerEffectsView.Menu, TrainerEffectsView.Count())
+    Link("settings.theme", ThemeView.Menu, ThemeName())
+    Link("settings.layout", LayoutView.Menu)
+    Link("settings.navigation", NavigationView.Menu)
+    Link("settings.blockedcontrols", BlockedControlsView.Menu, OnOff(InputBlock.Enabled))
+    Link("settings.notifications", NotificationsView.Menu, OnOff(Notification.Style.Enabled))
+    Link("settings.language", LanguageView.Menu, LanguageName())
+    Link("settings.about", AboutView.Menu, FooterStyle.Version)
+end
+
+local function View()
+    Links()
+
+    Widgets.Break("")
+    if Widgets.HoldButton(L("settings.reset.label")) then Settings.Reset() end
+    Widgets.Tip(L("settings.reset.tip"))
+end
+
+SettingsView.Menu = Submenu.Create("settings.title", View)
+
+return SettingsView

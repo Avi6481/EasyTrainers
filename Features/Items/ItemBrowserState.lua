@@ -1,113 +1,226 @@
+local Logger = require("Core/Logger")
 local Inventory = require("Utils/Inventory")
-local Notification = require("UI/Panels/Notification/Notification")
-local DataUtils = require("Utils/DataExtractors/DataUtils")
-
-local RECENT_LIMIT = 20
+local Notify = require("Utils/Notify")
+local Catalog = require("Features/Items/Catalog")
 
 local ItemBrowserState = {
-    Action = { index = 1 },
-    Actions = { "Add", "Remove", "Remove All" },
-    Quantity = { value = 1, min = 1, max = 999, step = 1 },
-    Owned = nil,
-    InventoryItems = nil,
-    Recent = {},
+    Action = "Add",
+    Quantity = 1,
+    Ready = false,
+    Changes = 0,
+    OwnedVersion = 0,
+    Kinds = 0,
+    Copies = 0,
+    Recent = {}
 }
 
-local s_Descriptions = {}
+ItemBrowserState.ACTIONS = { "Add", "Remove", "RemoveAll" }
+ItemBrowserState.MAX_QUANTITY = 999
+
+local RECENT_LIMIT = 20
+local PROTECTED_MONEY = "Items.money"
+local OWNED_REFRESH = 1
+local EVERY = math.huge
+
+local s_Owned = {}
+local s_OwnedItems = {}
+local s_OwnedCatalog = nil
+local s_NextOwned = 0
+local s_Focus = nil
+local s_Failed = {}
+
+local function Try(name, callback, ...)
+    local ok, err = pcall(callback, ...)
+    if not ok and not s_Failed[name] then
+        s_Failed[name] = true
+        Logger.Log(name .. " failed: " .. tostring(err))
+    end
+    return ok
+end
+
+local function Quantity()
+    return math.max(1, math.min(ItemBrowserState.MAX_QUANTITY, math.floor(tonumber(ItemBrowserState.Quantity) or 1)))
+end
 
 local function Remember(item)
-    for index, entry in ipairs(ItemBrowserState.Recent) do
-        if entry.id == item.id then
-            table.remove(ItemBrowserState.Recent, index)
+    item = Catalog.ByRecord[item.Id] or item
+    local recent = ItemBrowserState.Recent
+    for index, entry in ipairs(recent) do
+        if entry.Id == item.Id then
+            table.remove(recent, index)
             break
         end
     end
-    table.insert(ItemBrowserState.Recent, 1, item)
-    if #ItemBrowserState.Recent > RECENT_LIMIT then table.remove(ItemBrowserState.Recent) end
+    table.insert(recent, 1, item)
+    if #recent > RECENT_LIMIT then table.remove(recent) end
 end
 
-function ItemBrowserState.GetDescription(id)
-    if s_Descriptions[id] then return s_Descriptions[id] end
-    local record = TweakDB:GetRecord(id)
-    local key = record and DataUtils.SafeCall(function() return record:LocalizedDescription() end)
-    local text = key and DataUtils.GetLocalizedSafe(key) or ""
-    s_Descriptions[id] = (text:gsub("<.->", ""))
-    return s_Descriptions[id]
+function ItemBrowserState.Removing()
+    return ItemBrowserState.Action ~= "Add"
 end
 
-function ItemBrowserState.RefreshInventory()
-    ItemBrowserState.InventoryItems = Inventory.GetAllItems() or {}
-    ItemBrowserState.Owned = {}
-    for _, item in ipairs(ItemBrowserState.InventoryItems) do
-        ItemBrowserState.Owned[item.id] = (ItemBrowserState.Owned[item.id] or 0) + (item.quantity or 1)
+function ItemBrowserState.Summary()
+    if ItemBrowserState.Action == "RemoveAll" then return "-ALL" end
+    return (ItemBrowserState.Removing() and "-" or "+") .. tostring(Quantity())
+end
+
+function ItemBrowserState.Count(item)
+    if not item then return 0 end
+    return s_Owned[item.Id] or 0
+end
+
+function ItemBrowserState.Focus(item)
+    s_Focus = item
+end
+
+function ItemBrowserState.OwnedItems()
+    return s_OwnedItems
+end
+
+local function OwnedList()
+    local list = {}
+    for record in pairs(s_Owned) do table.insert(list, Catalog.Lookup(record)) end
+    return list
+end
+
+local function Owned(player)
+    local owned = Inventory.Counts(player)
+    local kinds, copies, changed = 0, 0, not ItemBrowserState.Ready
+    for record, quantity in pairs(owned) do
+        kinds = kinds + 1
+        copies = copies + quantity
+        if s_Owned[record] ~= quantity then changed = true end
     end
-    return ItemBrowserState.Owned
-end
-
-function ItemBrowserState.GetInventory()
-    if not ItemBrowserState.InventoryItems then ItemBrowserState.RefreshInventory() end
-    return ItemBrowserState.InventoryItems
-end
-
-function ItemBrowserState.GetOwned(id)
-    if not ItemBrowserState.Owned then ItemBrowserState.RefreshInventory() end
-    return ItemBrowserState.Owned[id] or 0
-end
-
-function ItemBrowserState.GetAction()
-    return ItemBrowserState.Actions[ItemBrowserState.Action.index or 1]
-end
-
-function ItemBrowserState.GetSummary(quantity)
-    if ItemBrowserState.GetAction() == "Remove All" then return "-ALL" end
-    local prefix = ItemBrowserState.GetAction() == "Remove" and "-" or "+"
-    return prefix .. tostring(quantity or ItemBrowserState.Quantity.value)
-end
-
-function ItemBrowserState.Apply(item, quantity, quiet)
-    if not item or not item.id then return false end
-    local action = ItemBrowserState.GetAction()
-    local amount = action == "Remove All" and ItemBrowserState.GetOwned(item.id)
-        or quantity or ItemBrowserState.Quantity.value
-    local name = item.name or item.displayName or item.id
-    local removing = action ~= "Add"
-    if amount < 1 then
-        if not quiet then Notification.Error("You do not own " .. name, 2) end
-        return false
+    for record in pairs(s_Owned) do
+        if not owned[record] then changed = true end
     end
-    local success = removing and Inventory.RemoveItem(item.id, amount) or Inventory.GiveItem(item.id, amount)
 
-    if success then
-        local owned = ItemBrowserState.GetOwned(item.id)
-        local updated = math.max(0, owned + (removing and -amount or amount))
-        ItemBrowserState.Owned[item.id] = updated
+    s_Owned = owned
+    ItemBrowserState.Kinds = kinds
+    ItemBrowserState.Copies = copies
+    ItemBrowserState.Ready = true
 
-        local found
-        for index, entry in ipairs(ItemBrowserState.InventoryItems or {}) do
-            if entry.id == item.id then
-                found = true
-                if updated == 0 then
-                    table.remove(ItemBrowserState.InventoryItems, index)
-                else
-                    entry.quantity = updated
-                end
-                break
+    local rebuild = Catalog.Loaded and (changed or s_OwnedCatalog ~= Catalog.Version)
+    if rebuild then
+        s_OwnedItems = OwnedList()
+        s_OwnedCatalog = Catalog.Version
+    end
+    if changed or rebuild then ItemBrowserState.OwnedVersion = ItemBrowserState.OwnedVersion + 1 end
+end
+
+local function Sync(player, now)
+    s_NextOwned = now + OWNED_REFRESH
+    Try("Item inventory", Owned, player)
+end
+
+function ItemBrowserState.Refresh(player)
+    if not player then return end
+    Sync(player, os.clock())
+end
+
+function ItemBrowserState.Update(player, now)
+    now = now or os.clock()
+    if not player then return end
+
+    if s_Focus and not s_Focus.Resolved then Try("Item details", Catalog.Resolve, s_Focus) end
+    if now >= s_NextOwned then Sync(player, now) end
+end
+
+local function Removed(item, removed)
+    if removed > 0 then
+        Notify.Success(tip("notify.items.removed", { name = item.Name, count = removed }))
+    else
+        Notify.Info(tip("notify.items.notowned", { name = item.Name }))
+    end
+end
+
+function ItemBrowserState.Apply(player, item)
+    if not item or not item.Id then return end
+
+    local action = ItemBrowserState.Action
+    if action == "Add" then
+        local count = Quantity()
+        if Inventory.Give(item.Id, count) then
+            Notify.Success(tip("notify.items.added", { name = item.Name, count = count }))
+        else
+            Notify.Error(tip("notify.items.addfailed", { name = item.Name }))
+        end
+    else
+        Removed(item, Inventory.Remove(player, item.Id, action == "RemoveAll" and EVERY or Quantity()))
+    end
+
+    Remember(item)
+    ItemBrowserState.Refresh(player)
+end
+
+local function Report(removing, done, failed)
+    if removing then
+        if done == 0 then
+            Notify.Info(L("notify.items.nothingtoremove"))
+            return
+        end
+        Notify.Success(tip("notify.items.removedmany", { count = done }))
+        return
+    end
+
+    if failed > 0 then
+        Notify.Warning(tip("notify.items.addedsome", { count = done, failed = failed }))
+        return
+    end
+    Notify.Success(tip("notify.items.addedmany", { count = done }))
+end
+
+local function Protected(item)
+    return item.Category == "quest" or item.Id == PROTECTED_MONEY
+end
+
+function ItemBrowserState.ApplyAll(player, items)
+    if not items or #items == 0 then
+        Notify.Info(L("notify.items.nothingshown"))
+        return
+    end
+
+    local removing = ItemBrowserState.Removing()
+    local count = ItemBrowserState.Action == "RemoveAll" and EVERY or Quantity()
+    local applied = {}
+    local done, failed = 0, 0
+    if removing then
+        local counts = {}
+        for _, item in ipairs(items) do
+            if not Protected(item) then
+                counts[item.Id] = count
+                if (s_Owned[item.Id] or 0) > 0 then table.insert(applied, item) end
             end
         end
-        if not found and updated > 0 then
-            table.insert(ItemBrowserState.InventoryItems, {
-                id = item.id,
-                name = item.name or item.displayName or item.id,
-                quantity = updated,
-            })
+        done = Inventory.RemoveMany(player, counts)
+    else
+        for _, item in ipairs(items) do
+            if Inventory.Give(item.Id, count) then
+                done = done + count
+                table.insert(applied, item)
+            else
+                failed = failed + 1
+            end
         end
-        Remember(item)
-        if quiet then return success end
-        Notification.Success(string.format("%s %dx %s", removing and "Removed" or "Added", amount, name), 2)
-    elseif not quiet then
-        Notification.Error(string.format("Could not %s %s", removing and "remove" or "add", name), 2)
     end
-    return success
+
+    for index = math.min(#applied, RECENT_LIMIT), 1, -1 do Remember(applied[index]) end
+    ItemBrowserState.Refresh(player)
+    ItemBrowserState.Changes = ItemBrowserState.Changes + 1
+    Report(removing, done, failed)
+end
+
+function ItemBrowserState.Reset()
+    s_Owned = {}
+    s_OwnedItems = {}
+    s_OwnedCatalog = nil
+    s_NextOwned = 0
+    s_Focus = nil
+    ItemBrowserState.Ready = false
+    ItemBrowserState.Kinds = 0
+    ItemBrowserState.Copies = 0
+    ItemBrowserState.OwnedVersion = ItemBrowserState.OwnedVersion + 1
+    ItemBrowserState.Changes = ItemBrowserState.Changes + 1
 end
 
 return ItemBrowserState

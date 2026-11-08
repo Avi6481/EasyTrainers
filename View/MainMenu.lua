@@ -1,84 +1,46 @@
-local Buttons = require("UI/Options/Buttons")
-local Submenu = require("UI/Navigation/Submenu")
-local Navigation = require("UI/Navigation/Navigation")
-local Renderer = require("UI/Render")
-local Notification = require("UI/Panels/Notification/Notification")
-local OptionRegistry = require("UI/Registry/OptionRegistry")
-local State = require("Controls/State")
-
-local SelfConfig = require("Features/Self/SelfConfig")
-local TeleportConfig = require("Features/Teleports/TeleportConfig")
-local VehicleConfig = require("Features/Vehicles/VehicleConfig")
-local WeaponConfig = require("Features/Weapons/WeaponConfig")
-local WorldConfig = require("Features/World/WorldConfig")
-
-local SelfView = require("View/Self/SelfMenuView")
-local SelfDevelopmentView = require("View/Self/SelfDevelopment")
-local SelfModifiersView = require("View/Self/SelfModifierView")
-local TeleportView = require("View/Teleports/TeleportView")
-local WeaponView = require("View/Weapons/WeaponMenuView")
-local VehicleView = require("View/Vehicle/VehicleMenuView")
-local SettingsView = require("View/Settings/SettingsView")
-local WeatherView = require("View/World/WeatherView")
+local Submenu = require("Navigation/Submenu")
+local Widgets = require("Widgets/Widgets")
+local SelfView = require("View/Self/SelfView")
+local ModifiersView = require("View/Modifiers/ModifiersView")
+local DevelopmentView = require("View/Development/DevelopmentView")
+local TeleportsView = require("View/Teleports/TeleportsView")
+local VehiclesView = require("View/Vehicles/VehiclesView")
+local WeaponsView = require("View/Weapons/WeaponsView")
+local ItemsView = require("View/Items/ItemsView")
+local FactsView = require("View/World/FactsView")
 local TimeView = require("View/World/TimeView")
-local FactsView = require("View/World/FactView")
-local ItemsView = require("View/Items/ItemBrowserView")
+local WeatherView = require("View/World/WeatherView")
 local WorldEditorView = require("View/WorldEditor/WorldEditorView")
+local SettingsView = require("View/Settings/SettingsView")
+local TestView = require("View/Test/TestView")
 
 local MainMenu = {}
 
-local s_Initialized = false
-
-local function MainView()
-    Buttons.Submenu(L("mainmenu.self.label"), SelfView, tip("mainmenu.self.tip"))
-    Buttons.Submenu(L("mainmenu.development.label"), SelfDevelopmentView, tip("mainmenu.development.tip"), function()
-        Notification.Warning(L("mainmenu.development.warning"))
-    end)
-    Buttons.Submenu(L("mainmenu.modifiers.label"), SelfModifiersView, tip("mainmenu.modifiers.tip"))
-    Buttons.Submenu(L("mainmenu.teleport.label"), TeleportView, tip("mainmenu.teleport.tip"))
-    Buttons.Submenu(L("mainmenu.weapon.label"), WeaponView, tip("mainmenu.weapon.tip"))
-    Buttons.Submenu(L("mainmenu.vehicle.label"), VehicleView, tip("mainmenu.vehicle.tip"))
-    Buttons.Submenu(L("mainmenu.facts.label"), FactsView, tip("mainmenu.facts.tip"), function()
-        Notification.Warning(L("mainmenu.facts.warning"))
-    end)
-    Buttons.Submenu(L("mainmenu.time.label"), TimeView, tip("mainmenu.time.tip"))
-    Buttons.Submenu(L("mainmenu.weather.label"), WeatherView, tip("mainmenu.weather.tip"))
-    Buttons.Submenu(L("mainmenu.items.label"), ItemsView, tip("mainmenu.items.tip"))
-    Buttons.Submenu(L("mainmenu.worldeditor.label"), WorldEditorView, tip("mainmenu.worldeditor.tip"))
-    Buttons.Submenu(L("mainmenu.settingsmenu.label"), SettingsView, tip("mainmenu.settingsmenu.tip"))
+local function Link(key, submenu)
+    Widgets.SubmenuButton(L(key .. ".label"), submenu)
+    Widgets.Tip(L(key .. ".tip"))
 end
 
-function MainMenu.Initialize()
-    if s_Initialized then return end
-
-    SelfConfig()
-    WeaponConfig()
-    VehicleConfig()
-    TeleportConfig()
-    WorldConfig()
-    OptionRegistry.RegisterHotkeyActions()
-
-    Renderer.Initialize(Submenu.Create("EasyTrainer", MainView))
-    Renderer.Enable(true)
-    Notification.Info("EasyTrainer initialized!")
-    s_Initialized = true
+local function View()
+    Link("mainmenu.self", SelfView.Menu)
+    Link("mainmenu.modifiers", ModifiersView.Menu)
+    Link("mainmenu.development", DevelopmentView.Menu)
+    Link("mainmenu.teleport", TeleportsView.Menu)
+    Link("mainmenu.vehicle", VehiclesView.Menu)
+    Link("mainmenu.weapon", WeaponsView.Menu)
+    Link("mainmenu.items", ItemsView.Menu)
+    Link("mainmenu.facts", FactsView.Menu)
+    Link("mainmenu.time", TimeView.Menu)
+    Link("mainmenu.weather", WeatherView.Menu)
+    Link("mainmenu.worldeditor", WorldEditorView.Menu)
+    Link("mainmenu.settingsmenu", SettingsView.Menu)
+   -- Link("mainmenu.uitest", TestView.Menu)
 end
 
-function MainMenu.Render(deltaTime)
-    if not s_Initialized then return end
+local ROOT_MENU = Submenu.Create("mainmenu.title", View)
 
-    local open = State.MenuOpen
-    Renderer.Enable(open)
-    Navigation.State.MouseEnabled = open and (State.OverlayOpen or State.MouseEnabled)
-    Renderer.SetInput({
-        UpPressed = open and State.UpPressed,
-        DownPressed = open and State.DownPressed,
-        LeftPressed = open and State.LeftPressed,
-        RightPressed = open and State.RightPressed,
-        SelectPressed = open and State.SelectPressed,
-        BackPressed = open and State.BackPressed
-    })
-    Renderer.Render(deltaTime)
+function MainMenu.Root()
+    return ROOT_MENU
 end
 
 return MainMenu

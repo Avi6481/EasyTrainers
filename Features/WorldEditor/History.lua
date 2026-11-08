@@ -1,12 +1,12 @@
-local Notification = require("UI/Panels/Notification/Notification")
-local Physics = require("Utils/Physics")
-local Rotation = require("Utils/Rotation")
+local Notify = require("Utils/Notify")
+local Physics = require("Features/WorldEditor/Physics")
+local Rotation = require("Features/WorldEditor/Rotation")
+local Entities = require("Features/WorldEditor/Entities")
 local Selection = require("Features/WorldEditor/Selection")
 local PropSpawner = require("Features/WorldEditor/PropSpawner")
 local Attachments = require("Features/WorldEditor/Attachments")
 local Scene = require("Features/WorldEditor/Scene")
 local Changes = require("Features/WorldEditor/Changes")
-local Entities = require("Utils/Entities")
 
 local History = {}
 
@@ -24,6 +24,7 @@ local s_IsBusy = nil
 
 local Hash = Entities.Hash
 local IsValid = Entities.IsValid
+local Pose = Entities.Pose
 
 local function Key(entity)
     local uid = PropSpawner.GetUid(entity)
@@ -31,8 +32,6 @@ local function Key(entity)
     local hash = Hash(entity)
     return hash and ("w" .. hash) or nil
 end
-
-local Pose = Entities.Pose
 
 local function SamePose(a, b)
     if not a or not b then return a == b end
@@ -99,7 +98,14 @@ local function Capture()
             if child:sub(1, 1) == "w" then state.Entities[child] = link.Child end
             if parent:sub(1, 1) == "w" then state.Entities[parent] = link.Parent end
             local position = { x = link.LocalPosition.x, y = link.LocalPosition.y, z = link.LocalPosition.z }
-            table.insert(state.Links, { Child = child, Parent = parent, Position = position, Rotation = Rotation.Normalize(link.LocalRotation), ChildName = link.Name, ParentName = link.ParentName })
+            table.insert(state.Links, {
+                Child = child,
+                Parent = parent,
+                Position = position,
+                Rotation = Rotation.Normalize(link.LocalRotation),
+                ChildName = link.Name,
+                ParentName = link.ParentName
+            })
         end
     end
     return state
@@ -196,26 +202,26 @@ local function FinishApply()
     end
 end
 
-local function Step(from, to, label)
+local function Step(from, to, undo)
     if s_Applying then return end
     Flush()
     local target = table.remove(from)
     if not target then
-        Notification.Info("Nothing to " .. label .. ".")
+        Notify.Info(L(undo and "notify.worldeditor.undo.none" or "notify.worldeditor.redo.none"))
         return
     end
     Push(to, s_Current)
     s_Current = target
     Apply(target)
-    Notification.Info(string.format("%s (%d left).", label == "undo" and "Undone" or "Redone", #from))
+    Notify.Info(tip(undo and "notify.worldeditor.undo.done" or "notify.worldeditor.redo.done", { count = #from }))
 end
 
 function History.Undo()
-    Step(s_Undo, s_Redo, "undo")
+    Step(s_Undo, s_Redo, true)
 end
 
 function History.Redo()
-    Step(s_Redo, s_Undo, "redo")
+    Step(s_Redo, s_Undo, false)
 end
 
 function History.CanUndo()

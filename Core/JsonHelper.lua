@@ -31,10 +31,27 @@ function JsonHelper.ReadOptional(path)
     return JsonHelper.Read(path, { SilentMissing = true })
 end
 
+local function Backup(path)
+    local source = io.open(path, "r")
+    if not source then return false end
+    local content = source:read("*a")
+    source:close()
+
+    local target = io.open(path .. ".bak", "w")
+    if not target then return false end
+    target:write(content or "")
+    target:close()
+    return true
+end
+
 function JsonHelper.LoadOrCreate(path, defaults)
     local data, err, status = JsonHelper.ReadOptional(path)
     if type(data) == "table" then return data, false, nil end
-    if status ~= "missing" then return nil, false, err end
+    if status == "open_failed" then return nil, false, err end
+    if status ~= "missing" then
+        local kept = Backup(path)
+        Logger.Log("JsonHelper: replacing unreadable " .. tostring(path) .. (kept and ", old copy kept as .bak" or ""))
+    end
 
     local ok, writeErr = JsonHelper.Write(path, defaults or {})
     if not ok then return nil, false, writeErr end
@@ -56,8 +73,12 @@ function JsonHelper.Write(path, data)
         return false, "Could not open file for writing: " .. path
     end
 
-    file:write(content)
-    file:close()
+    local written, writeErr = file:write(content)
+    local closed = file:close()
+    if not written or not closed then
+        Logger.Log("JsonHelper: failed to write " .. tostring(path) .. " (" .. tostring(writeErr) .. ")")
+        return false, "Could not write file: " .. path
+    end
     return true
 end
 

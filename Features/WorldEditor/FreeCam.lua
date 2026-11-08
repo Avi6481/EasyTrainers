@@ -1,24 +1,25 @@
 local Input = require("Core/Input")
-local Mouse = require("Core/Mouse")
 local Logger = require("Core/Logger")
-local Cron = require("Core/cp2077-cet-kit/Cron")
-local Bindings = require("Controls/Bindings")
-local State = require("Controls/State")
+local State = require("Core/State")
+local Timers = require("Features/WorldEditor/Timers")
+local Controls = require("Features/WorldEditor/Controls")
 
-local FreeCam = {}
+local FreeCam = {
+    MoveSpeed = 8.0,
+    FastMultiplier = 4.0,
+    SlowMultiplier = 0.2,
+    Smoothing = 10,
+    MouseSensitivity = 1.0,
+    StickLookSpeed = 120,
+    InvertLook = false,
+    FieldOfView = 70,
+    WheelAdjustsSpeed = true,
+    StickDeadzone = 0.24,
+    BlendTime = 0.6
+}
 
-FreeCam.MoveSpeed = { value = 8.0, min = 0.5, max = 150.0, step = 0.5, unit = "m/s" }
-FreeCam.FastMultiplier = { value = 4.0, min = 1.0, max = 20.0, step = 0.5, unit = "x" }
-FreeCam.SlowMultiplier = { value = 0.2, min = 0.05, max = 1.0, step = 0.05, unit = "x" }
-FreeCam.Smoothing = { value = 10, min = 0, max = 30, step = 1 }
-FreeCam.MouseSensitivity = { value = 1.0, min = 0.1, max = 5.0, step = 0.1, unit = "x" }
-FreeCam.StickLookSpeed = { value = 120, min = 20, max = 400, step = 10, unit = "deg/s" }
-FreeCam.InvertLook = { value = false }
-FreeCam.FieldOfView = { value = 70, min = 20, max = 120, step = 1, unit = "deg" }
-FreeCam.WheelAdjustsSpeed = { value = true }
-FreeCam.GamepadDeadzone = { value = 7849, min = 0, max = 16000, step = 250 }
-FreeCam.BlendTime = { value = 0.6, min = 0.0, max = 3.0, step = 0.1, unit = "s" }
-
+FreeCam.MinSpeed = 0.5
+FreeCam.MaxSpeed = 150
 FreeCam.Velocity = 0
 FreeCam.SpeedMultiplier = 1
 FreeCam.WheelLocked = false
@@ -33,7 +34,7 @@ local PITCH_LIMIT = 89
 local EYE_HEIGHT = 1.7
 local WHEEL_STEP = 1.15
 local DESPAWN_MARGIN = 0.2
-local STICK_RANGE = 32768
+local ORPHAN_CHECK = 0.25
 
 local s_Phase = "Idle"
 local s_EntityID = nil
@@ -50,6 +51,8 @@ local s_MouseX = 0
 local s_MouseY = 0
 local s_LockedYaw = 0
 local s_LockedPitch = 0
+local s_MouseXName = nil
+local s_MouseYName = nil
 
 local function Clamp(value, minimum, maximum)
     return math.max(minimum, math.min(maximum, value))
@@ -77,41 +80,41 @@ local function Axes()
 end
 
 local function Stick(axis)
-    local value = Input.GetGamepadAxis(axis)
-    if math.abs(value) < FreeCam.GamepadDeadzone.value then return 0 end
-    return value / STICK_RANGE
+    local value = Input.AxisValue(axis)
+    if math.abs(value) < FreeCam.StickDeadzone then return 0 end
+    return value
 end
 
 local function Axis(positive, negative)
     local value = 0
-    if Bindings.IsActionDown(positive) then value = value + 1 end
-    if Bindings.IsActionDown(negative) then value = value - 1 end
+    if Controls.Held(positive) then value = value + 1 end
+    if Controls.Held(negative) then value = value - 1 end
     return value
 end
 
-local function InputBlocked()
-    return State.TypingEnabled or State.BindingKey
+local function CursorShown()
+    return State.Menu.Open and State.Menu.Cursor
 end
 
 local function ReadMovement()
-    if InputBlocked() then return 0, 0, 0 end
+    if Controls.Blocked() then return 0, 0, 0 end
 
-    local forward = Axis("EDITOR_FORWARD", "EDITOR_BACKWARD") + Stick(Input.GP_AXIS.LEFT_Y)
-    local right = Axis("EDITOR_RIGHT", "EDITOR_LEFT") + Stick(Input.GP_AXIS.LEFT_X)
-    local up = Axis("EDITOR_UP", "EDITOR_DOWN")
+    local forward = Axis("Forward", "Back") + Stick(Input.Axis.LeftY)
+    local right = Axis("Right", "Left") + Stick(Input.Axis.LeftX)
+    local up = Axis("Up", "Down")
     return Clamp(forward, -1, 1), Clamp(right, -1, 1), up
 end
 
-local function UpdateLook(deltaTime)
+local function UpdateLook(delta)
     local mouseX, mouseY = s_MouseX, s_MouseY
     s_MouseX, s_MouseY = 0, 0
-    if InputBlocked() or State.MouseEnabled then return end
+    if Controls.Blocked() or CursorShown() then return end
 
-    local invert = FreeCam.InvertLook.value and -1 or 1
-    local mouseScale = MOUSE_DEGREES * FreeCam.MouseSensitivity.value
-    local stickScale = FreeCam.StickLookSpeed.value * deltaTime
-    local yawDelta = -mouseX * mouseScale - Stick(Input.GP_AXIS.RIGHT_X) * stickScale
-    local pitchDelta = (mouseY * mouseScale + Stick(Input.GP_AXIS.RIGHT_Y) * stickScale) * invert
+    local invert = FreeCam.InvertLook and -1 or 1
+    local mouseScale = MOUSE_DEGREES * FreeCam.MouseSensitivity
+    local stickScale = FreeCam.StickLookSpeed * delta
+    local yawDelta = -mouseX * mouseScale - Stick(Input.Axis.RightX) * stickScale
+    local pitchDelta = (mouseY * mouseScale + Stick(Input.Axis.RightY) * stickScale) * invert
 
     if FreeCam.LookLocked then
         s_LockedYaw = s_LockedYaw + yawDelta
@@ -124,38 +127,37 @@ local function UpdateLook(deltaTime)
 end
 
 local function UpdateWheel()
-    if FreeCam.WheelLocked or not FreeCam.WheelAdjustsSpeed.value or State.MouseEnabled or State.OverlayOpen then return end
+    if FreeCam.WheelLocked or not FreeCam.WheelAdjustsSpeed or State.Menu.Open or Controls.Blocked() then return end
 
-    local wheel = Mouse.GetWheel()
+    local wheel = Input.MouseWheel()
     if wheel == 0 then return end
-    local speed = FreeCam.MoveSpeed
-    speed.value = Clamp(speed.value * (WHEEL_STEP ^ wheel), speed.min, speed.max)
+    FreeCam.MoveSpeed = Clamp(FreeCam.MoveSpeed * (WHEEL_STEP ^ wheel), FreeCam.MinSpeed, FreeCam.MaxSpeed)
 end
 
 local function SpeedMultiplier()
-    if Bindings.IsActionDown("EDITOR_FAST") then return FreeCam.FastMultiplier.value end
-    if Bindings.IsActionDown("EDITOR_SLOW") then return FreeCam.SlowMultiplier.value end
+    if Controls.Held("Fast") then return FreeCam.FastMultiplier end
+    if Controls.Held("Slow") then return FreeCam.SlowMultiplier end
     return 1
 end
 
-local function UpdateMovement(deltaTime)
+local function UpdateMovement(delta)
     UpdateWheel()
     FreeCam.SpeedMultiplier = SpeedMultiplier()
 
     local forwardInput, rightInput, upInput = ReadMovement()
     local forward, right = Axes()
-    local speed = FreeCam.MoveSpeed.value * FreeCam.SpeedMultiplier
+    local speed = FreeCam.MoveSpeed * FreeCam.SpeedMultiplier
     local target = {
         x = (forward.x * forwardInput + right.x * rightInput) * speed,
         y = (forward.y * forwardInput + right.y * rightInput) * speed,
         z = (forward.z * forwardInput + upInput) * speed
     }
 
-    local smoothing = FreeCam.Smoothing.value
-    local blend = smoothing > 0 and math.min(1, deltaTime * smoothing) or 1
+    local smoothing = FreeCam.Smoothing
+    local blend = smoothing > 0 and math.min(1, delta * smoothing) or 1
     for _, axis in ipairs({ "x", "y", "z" }) do
         s_Velocity[axis] = s_Velocity[axis] + (target[axis] - s_Velocity[axis]) * blend
-        s_Position[axis] = s_Position[axis] + s_Velocity[axis] * deltaTime
+        s_Position[axis] = s_Position[axis] + s_Velocity[axis] * delta
     end
     FreeCam.Velocity = math.sqrt(s_Velocity.x ^ 2 + s_Velocity.y ^ 2 + s_Velocity.z ^ 2)
 end
@@ -165,12 +167,12 @@ local function ApplyTransform()
     local offset = Vector4.new(s_Position.x - origin.x, s_Position.y - origin.y, s_Position.z - origin.z, 1.0)
     s_Camera:SetLocalTransform(offset, Orientation(s_Yaw, s_Pitch))
 
-    s_Camera:SetFOV(FreeCam.FieldOfView.value)
+    s_Camera:SetFOV(FreeCam.FieldOfView)
     if s_BaseZoom then pcall(function() s_Camera:SetZoom(s_BaseZoom) end) end
 end
 
-local function SpawnTransform()
-    local transform = Game.GetPlayer():GetWorldTransform()
+local function SpawnTransform(player)
+    local transform = player:GetWorldTransform()
     transform:SetPosition(transform, Vector4.new(s_Position.x, s_Position.y, s_Position.z, 1.0))
     transform:SetOrientation(transform, Quaternion.new(0, 0, 0, 1))
     return transform
@@ -182,8 +184,7 @@ function FreeCam.AnglesFromForward(forward)
     return yaw, pitch
 end
 
-local function CaptureStartView()
-    local player = Game.GetPlayer()
+local function CaptureStartView(player)
     local origin = player:GetWorldPosition()
     s_Position = { x = origin.x, y = origin.y, z = origin.z + EYE_HEIGHT }
 
@@ -197,19 +198,35 @@ local function CaptureStartView()
     s_Velocity = { x = 0, y = 0, z = 0 }
 end
 
+local function DespawnLate(entityID)
+    local started = os.clock()
+    Timers.Every(ORPHAN_CHECK, function(timer)
+        local ok, entity = pcall(Game.FindEntityByID, entityID)
+        if ok and entity then
+            pcall(exEntitySpawner.Despawn, entity)
+            Timers.Halt(timer)
+        elseif os.clock() - started > SPAWN_TIMEOUT then
+            Timers.Halt(timer)
+        end
+    end)
+end
+
 local function Despawn(blendTime)
     local camera, entity = s_Camera, s_Entity
     blendTime = blendTime or 0
 
     if camera then pcall(function() camera:Deactivate(blendTime, false) end) end
     pcall(function() Game.GetPlayer():GetFPPCameraComponent():Activate(blendTime, false) end)
-    if not entity then return end
+    if not entity then
+        if s_EntityID then DespawnLate(s_EntityID) end
+        return
+    end
 
     if blendTime <= 0 then
         pcall(exEntitySpawner.Despawn, entity)
         return
     end
-    Cron.After(blendTime + DESPAWN_MARGIN, function() pcall(exEntitySpawner.Despawn, entity) end)
+    Timers.After(blendTime + DESPAWN_MARGIN, function() pcall(exEntitySpawner.Despawn, entity) end)
 end
 
 function FreeCam.Forget()
@@ -223,6 +240,7 @@ function FreeCam.Forget()
     s_LockedYaw, s_LockedPitch = 0, 0
     FreeCam.Velocity = 0
     FreeCam.LookLocked = false
+    FreeCam.WheelLocked = false
 end
 
 local function Fail(reason)
@@ -248,12 +266,17 @@ local function TryAttach()
     local collider = entity:FindComponentByName(CName.new(COLLIDER_COMPONENT))
     if collider then collider:Toggle(false) end
 
-    local ok, zoom = pcall(function() return s_Camera:GetZoom() end)
-    s_BaseZoom = ok and zoom or nil
+    local zoomOk, zoom = pcall(function() return s_Camera:GetZoom() end)
+    s_BaseZoom = zoomOk and zoom or nil
     ApplyTransform()
-    s_Camera:Activate(FreeCam.BlendTime.value, false)
+    s_Camera:Activate(FreeCam.BlendTime, false)
     s_Phase = "Active"
     Logger.Log("FreeCam: camera entity active")
+end
+
+function FreeCam.Initialize()
+    s_MouseXName = CName.new("CameraMouseX")
+    s_MouseYName = CName.new("CameraMouseY")
 end
 
 function FreeCam.IsActive()
@@ -264,12 +287,12 @@ function FreeCam.IsReady()
     return s_Phase == "Active"
 end
 
-function FreeCam.Start()
+function FreeCam.Start(player)
     if s_Phase ~= "Idle" then return true end
-    if not Game.GetPlayer() then return false end
+    if not player then return false end
 
-    CaptureStartView()
-    local ok, entityID = pcall(exEntitySpawner.Spawn, CAMERA_ENTITY, SpawnTransform())
+    CaptureStartView(player)
+    local ok, entityID = pcall(exEntitySpawner.Spawn, CAMERA_ENTITY, SpawnTransform(player))
     if not ok or not entityID then
         Logger.Log("FreeCam: failed to spawn camera entity (" .. tostring(entityID) .. ")")
         return false
@@ -282,9 +305,10 @@ function FreeCam.Start()
     return true
 end
 
-function FreeCam.Stop()
+function FreeCam.Stop(blendTime)
     if s_Phase == "Idle" then return end
-    Despawn(s_Phase == "Active" and FreeCam.BlendTime.value or 0)
+    if blendTime == nil then blendTime = s_Phase == "Active" and FreeCam.BlendTime or 0 end
+    Despawn(blendTime)
     FreeCam.Forget()
     Logger.Log("FreeCam: stopped")
 end
@@ -292,22 +316,36 @@ end
 function FreeCam.HandleAction(action)
     if s_Phase ~= "Active" then return end
 
-    local name = Game.NameToString(action:GetName(action))
-    if name == "CameraMouseX" then
-        s_MouseX = s_MouseX + action:GetValue(action)
-    elseif name == "CameraMouseY" then
-        s_MouseY = s_MouseY + action:GetValue(action)
+    if ListenerAction.IsAction(action, s_MouseXName) then
+        s_MouseX = s_MouseX + ListenerAction.GetValue(action)
+    elseif ListenerAction.IsAction(action, s_MouseYName) then
+        s_MouseY = s_MouseY + ListenerAction.GetValue(action)
     end
 end
 
-function FreeCam.ResetToPlayer()
-    if s_Phase ~= "Active" then return end
+function FreeCam.ResetToPlayer(player)
+    if s_Phase ~= "Active" or not player then return end
 
-    local player = Game.GetPlayer()
     local origin = player:GetWorldPosition()
     s_Position = { x = origin.x, y = origin.y, z = origin.z + EYE_HEIGHT }
     s_Yaw, s_Pitch = player:GetWorldOrientation():ToEulerAngles().yaw, 0
     s_Velocity = { x = 0, y = 0, z = 0 }
+end
+
+function FreeCam.Focus(target, distance)
+    if s_Phase ~= "Active" then return false end
+
+    local dx, dy, dz = target.x - s_Position.x, target.y - s_Position.y, target.z - s_Position.z
+    local length = math.sqrt(dx * dx + dy * dy + dz * dz)
+    if length < 0.01 then return false end
+
+    local forward = { x = dx / length, y = dy / length, z = dz / length }
+    local yaw, pitch = FreeCam.AnglesFromForward(forward)
+    local back = math.min(distance, length)
+    s_Yaw, s_Pitch = WrapYaw(yaw), Clamp(pitch, -PITCH_LIMIT, PITCH_LIMIT)
+    s_Position = { x = target.x - forward.x * back, y = target.y - forward.y * back, z = target.z - forward.z * back }
+    s_Velocity = { x = 0, y = 0, z = 0 }
+    return true
 end
 
 function FreeCam.Rebase()
@@ -332,26 +370,26 @@ function FreeCam.GetForward()
     return forward
 end
 
+function FreeCam.GetRight()
+    local _, right = Axes()
+    return right
+end
+
 function FreeCam.ConsumeLockedLook()
     local yaw, pitch = s_LockedYaw, s_LockedPitch
     s_LockedYaw, s_LockedPitch = 0, 0
     return yaw, pitch
 end
 
-function FreeCam.GetRight()
-    local _, right = Axes()
-    return right
-end
-
-function FreeCam.Tick(deltaTime)
+function FreeCam.Tick(delta)
     if s_Phase == "Spawning" then
         TryAttach()
         return
     end
     if s_Phase ~= "Active" then return end
 
-    UpdateLook(deltaTime)
-    UpdateMovement(deltaTime)
+    UpdateLook(delta)
+    UpdateMovement(delta)
 
     local ok, err = pcall(ApplyTransform)
     if not ok then Fail("failed to move camera (" .. tostring(err) .. ")") end

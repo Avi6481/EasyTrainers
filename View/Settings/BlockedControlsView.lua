@@ -1,53 +1,58 @@
-local Buttons = require("UI/Options/Buttons")
-local Submenu = require("UI/Navigation/Submenu")
-local Restrictions = require("Controls/Restrictions")
-local Notification = require("UI/Panels/Notification/Notification")
+local InputBlock = require("Core/InputBlock")
+local Ref = require("Core/Ref")
+local Submenu = require("Navigation/Submenu")
+local Widgets = require("Widgets/Widgets")
 
+local BlockedControlsView = {}
+
+local KEY = "settings.blockedcontrols."
+
+local GROUPS = { "keyboard", "mouse", "controller" }
+
+local s_BlockGame = Ref.Field(InputBlock, "Enabled")
 local s_Refs = {}
-local s_Menus = {}
+local s_MenuDoc = nil
 
-local function Ref(mode, effect)
-    s_Refs[mode] = s_Refs[mode] or {}
-    local ref = s_Refs[mode][effect] or {}
-    ref.value = Restrictions.Blocked[mode][effect] == true
-    s_Refs[mode][effect] = ref
-    return ref
+for _, extra in ipairs(InputBlock.Extras) do s_Refs[extra.Id] = Ref.Field(InputBlock.Extra, extra.Id) end
+
+local function MenuInfo()
+    if s_MenuDoc then return s_MenuDoc end
+
+    s_MenuDoc = {
+        { Kind = "Eyebrow", Text = L(KEY .. "title") },
+        { Kind = "Title", Text = L(KEY .. "info.title") },
+        { Kind = "Separator" },
+        { Kind = "Entry", Label = L(KEY .. "keyboard"), LabelSample = L(KEY .. "controller"), Text = L(KEY .. "info.keyboard") },
+        { Kind = "Entry", Label = L(KEY .. "mouse"), LabelSample = L(KEY .. "controller"), Text = L(KEY .. "info.mouse") },
+        { Kind = "Entry", Label = L(KEY .. "controller"), LabelSample = L(KEY .. "controller"), Text = L(KEY .. "info.controller") },
+        { Kind = "Text", Text = L(KEY .. "info.typing"), Tone = "Dim" }
+    }
+    return s_MenuDoc
 end
 
-local function ModeView(mode)
-    Buttons.Option("Reset to Defaults", "Restore the default blocked controls for this mode.", function() Restrictions.ResetMode(mode.Id) end)
-
-    Buttons.Break("Blocked Controls")
-    for _, entry in ipairs(Restrictions.Catalog) do
-        Buttons.GhostToggle(entry.Label, Ref(mode.Id, entry.Id), "Block " .. entry.Label:lower() .. " in this mode.", function(value)
-            Restrictions.SetBlocked(mode.Id, entry.Id, value)
-        end)
+local function Group(group)
+    Widgets.Break(L(KEY .. group))
+    for _, extra in ipairs(InputBlock.Extras) do
+        if extra.Group == group then
+            local key = KEY .. extra.Id:lower()
+            Widgets.Toggle(L(key .. ".label"), s_Refs[extra.Id])
+            Widgets.Tip(L(key .. ".tip"))
+        end
     end
 end
 
-local function ModeMenu(mode)
-    s_Menus[mode.Id] = s_Menus[mode.Id] or Submenu.Create(mode.Label, function() ModeView(mode) end)
-    return s_Menus[mode.Id]
+local function View()
+    Widgets.Toggle(L("navigation.blockgame.label"), s_BlockGame)
+    Widgets.Tip(L("navigation.blockgame.tip"))
+    Widgets.Info(MenuInfo)
+
+    for _, group in ipairs(GROUPS) do Group(group) end
+
+    Widgets.Break("")
+    if Widgets.Button(L(KEY .. "reset.label")) then InputBlock.ResetExtras() end
+    Widgets.Tip(L(KEY .. "reset.tip"))
 end
 
-local function ClearStuck()
-    local removed = Restrictions.RemoveStale()
-    if removed == nil then
-        Notification.Error("Load into the game first", 2)
-    elseif removed == 0 then
-        Notification.Info("No stuck restrictions found", 2)
-    else
-        Notification.Success("Cleared " .. tostring(removed) .. " stuck restrictions", 2)
-    end
-end
+BlockedControlsView.Menu = Submenu.Create("settings.blockedcontrols.title", View)
 
-local function BlockedControlsView()
-    for _, mode in ipairs(Restrictions.Modes) do
-        Buttons.Submenu(mode.Label, ModeMenu(mode), mode.Tip)
-    end
-
-    Buttons.Break("Troubleshooting")
-    Buttons.Option("Clear Stuck Restrictions", "Removes trainer restrictions left behind in a save, such as blocked fast travel, phone calls, or movement.", ClearStuck)
-end
-
-return Submenu.Create("Blocked Controls", BlockedControlsView)
+return BlockedControlsView

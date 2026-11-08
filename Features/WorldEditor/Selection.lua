@@ -1,16 +1,17 @@
-local Entities = require("Utils/Entities")
+local Entities = require("Features/WorldEditor/Entities")
 
-local Selection = {}
+local Selection = {
+    Highlight = true
+}
 
-Selection.Highlight = { value = true }
-
-local OUTLINE_CHILD = 1
-local OUTLINE_PARENT = 6
+local OUTLINE = 1
 
 local s_List = {}
+local s_Highlighted = true
 
 local Safe = Entities.Safe
 local Hash = Entities.Hash
+local IsValid = Entities.IsValid
 
 local function SetOutline(entity, outline)
     if not EasyWorldEditor or not entity then return end
@@ -21,15 +22,10 @@ local function SetOutline(entity, outline)
     end
 end
 
-local IsValid = Entities.IsValid
-
 local function Refresh()
-    for index, entry in ipairs(s_List) do
-        local outline = nil
-        if Selection.Highlight.value then
-            outline = (#s_List > 1 and index == #s_List) and OUTLINE_PARENT or OUTLINE_CHILD
-        end
-        SetOutline(entry.Entity, outline)
+    s_Highlighted = Selection.Highlight
+    for _, entry in ipairs(s_List) do
+        SetOutline(entry.Entity, Selection.Highlight and OUTLINE or nil)
     end
 end
 
@@ -38,7 +34,7 @@ local function Entry(target)
         Entity = target.Entity,
         EntityHash = target.EntityHash or Hash(target.Entity),
         Kind = target.Kind or "Prop",
-        Name = target.DisplayName or target.Record or target.ClassName or "Entity",
+        Name = target.DisplayName or target.Record or target.ClassName or L("worldeditor.entity"),
         Record = target.Record,
         ClassName = target.ClassName,
         Appearance = target.Appearance
@@ -114,14 +110,6 @@ function Selection.Replace(old, new)
     Refresh()
 end
 
-function Selection.RefreshHighlight()
-    if not Selection.Highlight.value then
-        for _, entry in ipairs(s_List) do SetOutline(entry.Entity, nil) end
-        return
-    end
-    Refresh()
-end
-
 function Selection.Tick()
     local removed = false
     for index = #s_List, 1, -1 do
@@ -130,7 +118,7 @@ function Selection.Tick()
             removed = true
         end
     end
-    if removed then Refresh() end
+    if removed or s_Highlighted ~= Selection.Highlight then Refresh() end
 end
 
 function Selection.Forget()

@@ -8,6 +8,7 @@ local Language = {
 local s_CurrentCode = "en"
 local s_Translations = {}
 local s_Fallback = {}
+local s_Cache = {}
 
 local function IsValidCode(code)
     return type(code) == "string" and code:match("^[%w_%-]+$") ~= nil
@@ -67,6 +68,7 @@ function Language.Load(code)
     s_CurrentCode = requested
     s_Translations = data
     s_Fallback = fallback
+    s_Cache = {}
     Logger.Log("Language: loaded '" .. requested .. "'")
     return true
 end
@@ -105,7 +107,13 @@ end
 
 function Language.Get(key)
     if type(key) ~= "string" then return tostring(key or "") end
-    return Lookup(s_Translations, key) or Lookup(s_Fallback, key) or key
+
+    local text = s_Cache[key]
+    if text then return text end
+
+    text = Lookup(s_Translations, key) or Lookup(s_Fallback, key) or key
+    s_Cache[key] = text
+    return text
 end
 
 function Language.GetCurrentCode()

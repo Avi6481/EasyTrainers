@@ -1,19 +1,19 @@
 local Logger = require("Core/Logger")
-local Physics = require("Utils/Physics")
-local Notification = require("UI/Panels/Notification/Notification")
+local Notify = require("Utils/Notify")
+local Physics = require("Features/WorldEditor/Physics")
+local Entities = require("Features/WorldEditor/Entities")
 local FreeCam = require("Features/WorldEditor/FreeCam")
 local Selection = require("Features/WorldEditor/Selection")
 local Grabbables = require("Features/WorldEditor/Grabbables")
 local Tracker = require("Features/WorldEditor/Tracker")
 local Changes = require("Features/WorldEditor/Changes")
 local Attachments = require("Features/WorldEditor/Attachments")
-local Entities = require("Utils/Entities")
 
-local PropSpawner = {}
-
-PropSpawner.PreviewEnabled = { value = true }
-PropSpawner.PreviewDistance = { value = 4.0, min = 1.5, max = 20.0, step = 0.5, unit = "m" }
-PropSpawner.PreviewSpin = { value = true }
+local PropSpawner = {
+    PreviewEnabled = true,
+    PreviewDistance = 4.0,
+    PreviewSpin = true
+}
 
 local PREVIEW_DELAY = 0.3
 local BROWSE_TIMEOUT = 0.25
@@ -21,6 +21,8 @@ local SPAWN_TIMEOUT = 8.0
 local BOUNDS_WAIT = 3.0
 local SPIN_SPEED = 35
 local PLAYER_HEIGHT = 1.2
+local VEHICLE_DISTANCE = 8.0
+local PREVIEW_PARK_HEIGHT = 200
 local POSITION_TOLERANCE = 0.01
 local ROTATION_TOLERANCE = 0.9999
 local MESH_TEMPLATE = "base\\environment\\ld_kit\\marker_blue_small.ent"
@@ -43,10 +45,16 @@ local function Hash(value)
     return Entities.IdHash(value) or Entities.Hash(value)
 end
 
-local function Anchor()
+function PropSpawner.IsVehicle(entry)
+    return entry ~= nil and entry.Record ~= nil
+end
+
+local function Anchor(entry)
+    local distance = PropSpawner.PreviewDistance
+    if PropSpawner.IsVehicle(entry) then distance = math.max(distance, VEHICLE_DISTANCE) end
+
     if FreeCam.IsReady() then
         local camera, forward = FreeCam.GetPosition(), FreeCam.GetForward()
-        local distance = PropSpawner.PreviewDistance.value
         return { x = camera.x + forward.x * distance, y = camera.y + forward.y * distance, z = camera.z + forward.z * distance },
             FreeCam.GetRotation() + 180
     end
@@ -54,7 +62,6 @@ local function Anchor()
     local player = Game.GetPlayer()
     if not player then return nil end
     local position, forward = player:GetWorldPosition(), player:GetWorldForward()
-    local distance = PropSpawner.PreviewDistance.value
     return { x = position.x + forward.x * distance, y = position.y + forward.y * distance, z = position.z + PLAYER_HEIGHT },
         player:GetWorldYaw() + 180
 end
@@ -93,6 +100,10 @@ function PropSpawner.CanSpawnMeshes()
     if s_MeshSupported == nil then
         s_MeshSupported = EasyWorldEditor ~= nil and Safe(function() return EasyWorldEditor.IsMeshSpawnSupported() end) == true
     end
+    return s_MeshSupported
+end
+
+function PropSpawner.MeshSupportKnown()
     return s_MeshSupported
 end
 
@@ -152,10 +163,6 @@ local function QueueSpawn(template, mesh, entry, withBox)
 
     local appearance = CName.new(MESH_APPEARANCE)
     local queued = Safe(function() return EasyWorldEditor.QueueMesh(template, mesh, appearance, boxMin, boxMax) end)
-    if queued == nil and mesh ~= "" then
-        queued = Safe(function() return EasyWorldEditor.QueueMesh(template, mesh, appearance) end)
-        hasBox = false
-    end
     return queued == true, queued == true and hasBox
 end
 
@@ -209,6 +216,12 @@ local function DespawnEntity(entity)
     if entity then Safe(function() exEntitySpawner.Despawn(entity) end) end
 end
 
+local function RestoreOriginal(record)
+    if not record.Original then return end
+    if Entities.IsValid(record.Original.Entity) then Physics.RestoreCollision(record.Original.Hidden) end
+    record.Original = nil
+end
+
 local function Orphan(id)
     if id then table.insert(s_Placed, { ID = id, Started = os.clock(), Orphaned = true }) end
 end
@@ -228,7 +241,7 @@ function PropSpawner.Browse()
 end
 
 function PropSpawner.Preview(entry)
-    if not PropSpawner.PreviewEnabled.value then return end
+    if not PropSpawner.PreviewEnabled then return end
     if s_Requested and s_Requested.Entry == entry then return end
     s_Requested = { Entry = entry, At = os.clock() }
 end
@@ -237,9 +250,9 @@ function PropSpawner.GetPreviewEntry()
     return s_Preview and s_Preview.Entry or nil
 end
 
-function PropSpawner.GetPreviewEntity(entry)
+function PropSpawner.GetPreviewCard(entry)
     if not s_Preview or s_Preview.Entry ~= entry then return nil end
-    return s_Preview.Entity, s_Preview.Held
+    return s_Preview.Card
 end
 
 local function SpawnPreview()
@@ -247,33 +260,60 @@ local function SpawnPreview()
     if s_Preview and s_Preview.Entry == s_Requested.Entry then return end
 
     ClearPreview()
-    local position, yaw = Anchor()
+    local position, yaw = Anchor(s_Requested.Entry)
     if not position then return end
 
-    local entityID = SpawnAt(s_Requested.Entry, position, yaw, false)
+    local parked = { x = position.x, y = position.y, z = position.z + PREVIEW_PARK_HEIGHT }
+    local entityID = SpawnAt(s_Requested.Entry, parked, yaw, false)
     if not entityID then return end
     s_Spin = 0
     s_Preview = { Entry = s_Requested.Entry, ID = entityID, Started = os.clock(), Yaw = yaw }
 end
 
-local function UpdatePreview(deltaTime)
+local function SizeText(bounds)
+    if not bounds or not bounds.Native then return nil end
+    return string.format("%.2f x %.2f x %.2f m", bounds.Max.x - bounds.Min.x, bounds.Max.y - bounds.Min.y, bounds.Max.z - bounds.Min.z)
+end
+
+local function UpdateCard(preview)
+    local entity = preview.Entity
+    local className = Safe(function() return Game.NameToString(entity:GetClassName()) end)
+    local size = SizeText(Grabbables.GetBounds(entity))
+    local dynamic = preview.Held ~= nil and #preview.Held.Bodies > 0
+
+    local card = preview.Card
+    if card and card.ClassName == className and card.Size == size and card.Dynamic == dynamic then return end
+    preview.Card = {
+        ClassName = className,
+        Size = size,
+        Dynamic = dynamic,
+        Version = (card and card.Version or 0) + 1
+    }
+end
+
+local function UpdatePreview(delta)
     if not s_Preview then return end
 
     if not s_Preview.Entity then
         s_Preview.Entity = Safe(function() return Game.FindEntityByID(s_Preview.ID) end)
         if s_Preview.Entity then
-            s_Preview.Held = Physics.Hold(s_Preview.Entity, "Prop")
+            local vehicle = PropSpawner.IsVehicle(s_Preview.Entry)
+            s_Preview.Held = Physics.Hold(s_Preview.Entity, vehicle and "Vehicle" or "Prop")
+            s_Preview.Frozen = vehicle and Physics.SetMovable(s_Preview.Entity, false)
+            s_Preview.Collision = Physics.Ghost(s_Preview.Entity)
+            s_Preview.NativeOff = Physics.SetCollision(s_Preview.Entity, false) > 0
         elseif os.clock() - s_Preview.Started > SPAWN_TIMEOUT then
-            Logger.Log("PropSpawner: preview never appeared for " .. s_Preview.Entry.Path)
+            Logger.Log("PropSpawner: preview never appeared for " .. tostring(s_Preview.Entry.Path))
             s_Preview = nil
         end
         return
     end
 
     LearnInfo(s_Preview.Entry, s_Preview.Entity, true)
-    local position, yaw = Anchor()
+    UpdateCard(s_Preview)
+    local position, yaw = Anchor(s_Preview.Entry)
     if not position then return end
-    if PropSpawner.PreviewSpin.value then s_Spin = (s_Spin + SPIN_SPEED * deltaTime) % 360 end
+    if PropSpawner.PreviewSpin then s_Spin = (s_Spin + SPIN_SPEED * delta) % 360 end
     s_Preview.Yaw = yaw + s_Spin
     Physics.Move(s_Preview.Held, Vector4.new(position.x, position.y, position.z, 1.0), s_Preview.Yaw)
 end
@@ -290,34 +330,60 @@ local function SettleOrphans()
     end
 end
 
+local function PreviewPose(entry)
+    local preview = s_Preview
+    if not preview or preview.Entry ~= entry or not preview.Entity then return nil end
+    local position = Safe(function() return preview.Entity:GetWorldPosition() end)
+    if not position then return nil end
+    return { x = position.x, y = position.y, z = position.z }, preview.Yaw
+end
+
 function PropSpawner.Place(entry)
-    if s_Preview and s_Preview.Entry == entry and s_Preview.Entity then
+    local previewing = s_Preview and s_Preview.Entry == entry and s_Preview.Entity
+    if previewing and not s_Preview.NativeOff then
         local record = s_Preview
         s_Preview = nil
         s_Requested = nil
-        local static = #record.Held.Bodies == 0
-        Physics.Release(record.Held, {})
-        if static then Physics.SnapToGround(record.Entity, Grabbables.GetBottom(record.Entity)) end
+        Physics.RestoreCollision(record.Collision)
+        record.Collision = nil
+        if record.Frozen then
+            Physics.SnapToGround(record.Entity, Grabbables.GetBottom(record.Entity))
+            Physics.SetMovable(record.Entity, true)
+            Physics.Release(record.Held, {})
+        else
+            local static = #record.Held.Bodies == 0
+            Physics.Release(record.Held, {})
+            if static then Physics.SnapToGround(record.Entity, Grabbables.GetBottom(record.Entity)) end
+        end
+        local kind = record.Held.Kind
         record.Held = nil
+        record.Frozen = nil
+        record.Card = nil
         record.FoundAt = os.clock()
         record.Uid = NewUid()
         table.insert(s_Placed, record)
         TrackRecord(record)
         Changes.Mark()
-        Selection.Select({ Entity = record.Entity, Kind = "Prop", DisplayName = entry.Name, ClassName = "Spawned Prop" })
+        Selection.Select({ Entity = record.Entity, Kind = kind, DisplayName = entry.Name, ClassName = L("worldeditor.spawnedprop") })
         return true
     end
 
     if not PropSpawner.CanSpawn(entry) then
-        Notification.Warning("Mesh props need the latest EasyTrainerUtility.")
+        Notify.Warning(L("notify.worldeditor.meshupdate"))
         return false
     end
 
-    local position, yaw = Anchor()
+    local position, yaw = Anchor(entry)
+    if previewing then
+        local previewPosition, previewYaw = PreviewPose(entry)
+        if previewPosition then position, yaw = previewPosition, previewYaw end
+        ClearPreview()
+        s_Requested = nil
+    end
     if not position then return false end
     local entityID, hasBox = SpawnAt(entry, position, yaw, WantsBox(entry, Info(entry)))
     if not entityID then
-        Notification.Error("Couldn't spawn " .. entry.Name .. ".")
+        Notify.Error(tip("notify.worldeditor.spawnfailed", { name = entry.Name }))
         return false
     end
     table.insert(s_Placed, { Entry = entry, ID = entityID, Started = os.clock(), SnapOnSpawn = true, Box = hasBox, Uid = NewUid() })
@@ -424,11 +490,16 @@ function PropSpawner.SpawnSaved(entry, position, orientation, uid)
     return record
 end
 
+local function RecordHash(record)
+    if not record.Hash then record.Hash = Hash(record.ID) end
+    return record.Hash
+end
+
 function PropSpawner.GetPlaced()
     local placed = {}
     for _, record in ipairs(s_Placed) do
         if record.Entity and record.Entry and not record.Orphaned then
-            table.insert(placed, { Entity = record.Entity, Name = record.Entry.Name })
+            table.insert(placed, { Entity = record.Entity, Hash = record.Hash, Name = record.Entry.Name })
         end
     end
     return placed
@@ -448,11 +519,6 @@ function PropSpawner.Count()
         if not record.Orphaned then count = count + 1 end
     end
     return count
-end
-
-local function RecordHash(record)
-    if not record.Hash then record.Hash = Hash(record.ID) end
-    return record.Hash
 end
 
 function PropSpawner.IsPlaced(entity)
@@ -496,6 +562,7 @@ function PropSpawner.Delete(entity)
     local selected = Selection.Get()
     if selected and Hash(selected.Entity) == Hash(entity) then Selection.Clear() end
     DropReplacement(record)
+    RestoreOriginal(record)
     local target = record.Entity or Safe(function() return Game.FindEntityByID(record.ID) end)
     if target then
         Attachments.Unlink(target)
@@ -525,6 +592,7 @@ function PropSpawner.DeleteAll()
         local record = s_Placed[index]
         if not record.Orphaned then
             DropReplacement(record)
+            RestoreOriginal(record)
             local entity = record.Entity or Safe(function() return Game.FindEntityByID(record.ID) end)
             if entity then
                 Attachments.Unlink(entity)
@@ -541,14 +609,14 @@ function PropSpawner.DeleteAll()
     return removed
 end
 
-function PropSpawner.Tick(deltaTime)
+function PropSpawner.Tick(delta)
     if s_Preview or s_Requested then
-        if os.clock() - s_LastBrowse > BROWSE_TIMEOUT or not PropSpawner.PreviewEnabled.value then
+        if os.clock() - s_LastBrowse > BROWSE_TIMEOUT or not PropSpawner.PreviewEnabled then
             ClearPreview()
             s_Requested = nil
         else
             SpawnPreview()
-            UpdatePreview(deltaTime)
+            UpdatePreview(delta)
         end
     end
 
@@ -558,10 +626,12 @@ function PropSpawner.Tick(deltaTime)
                 record.Entity = Safe(function() return Game.FindEntityByID(record.ID) end)
                 if record.Entity then
                     record.FoundAt = os.clock()
+                    RecordHash(record)
                     TrackRecord(record)
                     if record.SnapOnSpawn then Physics.SnapToGround(record.Entity, Grabbables.GetBottom(record.Entity)) end
                 end
             elseif record.Entry then
+                RecordHash(record)
                 UpdateRecord(record)
             end
         end

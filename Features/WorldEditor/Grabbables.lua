@@ -1,9 +1,9 @@
-local Rotation = require("Utils/Rotation")
-local Entities = require("Utils/Entities")
+local Rotation = require("Features/WorldEditor/Rotation")
+local Entities = require("Features/WorldEditor/Entities")
 
-local Grabbables = {}
-
-Grabbables.Range = { value = 60, min = 10, max = 200, step = 5, unit = "m" }
+local Grabbables = {
+    Range = 60
+}
 
 local BOUNDS_INTERVAL = 1.0
 local FALLBACK_HALF_SIZE = 0.35
@@ -71,7 +71,7 @@ function Grabbables.Refresh(cameraPosition)
     s_Entries = {}
     if not s_Source or not cameraPosition then return end
 
-    local range = Grabbables.Range.value
+    local range = Grabbables.Range
     for _, entity in ipairs(s_Source() or {}) do
         local position, rotation = Grabbables.GetPose(entity)
         if position then

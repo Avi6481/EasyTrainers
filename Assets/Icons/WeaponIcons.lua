@@ -416,4 +416,6 @@ local Parts = {
     ["weapon_weapon_root_None__Default_Neon_Military_Pimp"] = { 1, 0.875000, 0.356404, 0.999023, 0.393842, 254, 152 },
 }
 
-return { Sheets = Sheets, Parts = Parts }
+local Manifest = { Sheets = Sheets, Parts = Parts }
+
+return Manifest

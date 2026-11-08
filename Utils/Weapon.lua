@@ -1,141 +1,112 @@
 local Weapon = {}
 
-local REFRESH_INTERVAL = 0.2
+local REFRESH = 0.2
+local SLOTS = { Right = "AttachmentSlots.WeaponRight", Left = "AttachmentSlots.WeaponLeft" }
 
-local s_IsShooting = false
-local s_RangedAttack = nil
+local function NewHand()
+    return { Item = nil, Data = nil, StatsID = nil, Record = nil, Key = nil, Version = 0, Ranged = false, Melee = false }
+end
+
+Weapon.Right = NewHand()
+Weapon.Left = NewHand()
+
 local s_NextRefresh = 0
-local s_Item = nil
-local s_ItemData = nil
-local s_ItemID = nil
-local s_IsRanged = false
-local s_IsMelee = false
-local s_LastItemID = nil
-local s_Generation = 0
-local s_Left = { Item = nil, ItemData = nil, ItemID = nil, IsRanged = false, LastItemID = nil, Generation = 0 }
+local s_Shooting = false
+local s_RangedAttack = nil
+local s_Tags = nil
 
-local function RangedAttackName()
-    s_RangedAttack = s_RangedAttack or CName.new("RangedAttack")
-    return s_RangedAttack
-end
-
-local function IsRangedAttack(name)
-    local target = RangedAttackName()
-    return name ~= nil and name.hash_lo == target.hash_lo and name.hash_hi == target.hash_hi
-end
-
-function Weapon.HandleInputAction(action)
-    if not IsRangedAttack(action:GetName(action)) then return end
-
-    local actionType = action:GetType(action).value
-    if actionType == "BUTTON_PRESSED" or actionType == "TOGGLE_PRESSED" then
-        s_IsShooting = true
-    elseif actionType == "BUTTON_RELEASED" or actionType == "TOGGLE_RELEASED" then
-        s_IsShooting = false
-    elseif actionType == "AXIS_CHANGE" then
-        s_IsShooting = (action:GetValue(action) or 0) > 0.5
+local function Tags()
+    if not s_Tags then
+        s_Tags = { Ranged = CName.new("RangedWeapon"), Melee = CName.new("Melee") }
     end
+    return s_Tags
 end
 
-function Weapon.ResetInput()
-    s_IsShooting = false
+local function Clear(hand)
+    if hand.Key == nil then return end
+    hand.Item, hand.Data, hand.StatsID, hand.Record, hand.Key = nil, nil, nil, nil, nil
+    hand.Ranged, hand.Melee = false, false
+    hand.Version = hand.Version + 1
 end
 
-function Weapon.IsPlayerShooting()
-    return s_IsShooting
+local function Read(hand, player, system, slot)
+    local ok, item = pcall(function() return system:GetItemInSlot(player, slot) end)
+    if not ok or not item then return Clear(hand) end
+
+    local data = item:GetItemData()
+    local id = item:GetItemID()
+    if not data or not id then return Clear(hand) end
+
+    local record = TDBID.ToStringDEBUG(id.id)
+    local key = record .. "/" .. tostring(id.rngSeed)
+    if key == hand.Key then return end
+
+    local tags = Tags()
+    hand.Item = item
+    hand.Data = data
+    hand.StatsID = data:GetStatsObjectID()
+    hand.Record = record
+    hand.Key = key
+    hand.Ranged = data:HasTag(tags.Ranged)
+    hand.Melee = data:HasTag(tags.Melee)
+    hand.Version = hand.Version + 1
 end
 
-local function HasTag(itemData, tag)
-    return itemData and itemData:HasTag(CName(tag)) or false
-end
-
-local function TrackChange()
-    if s_ItemID == nil and s_LastItemID == nil then return end
-    if s_ItemID ~= nil and s_LastItemID ~= nil and s_ItemID == s_LastItemID then return end
-
-    s_Generation = s_Generation + 1
-    s_LastItemID = s_ItemID
-end
-
-local function RefreshLeft(player, transactionSystem)
-    local item = player and transactionSystem and transactionSystem:GetItemInSlot(player, "AttachmentSlots.WeaponLeft") or nil
-    s_Left.Item = item
-    s_Left.ItemData = item and item:GetItemData() or nil
-    s_Left.ItemID = item and item:GetItemID() or nil
-    s_Left.IsRanged = HasTag(s_Left.ItemData, "RangedWeapon")
-
-    if s_Left.ItemID == nil and s_Left.LastItemID == nil then return end
-    if s_Left.ItemID ~= nil and s_Left.LastItemID ~= nil and s_Left.ItemID == s_Left.LastItemID then return end
-
-    s_Left.Generation = s_Left.Generation + 1
-    s_Left.LastItemID = s_Left.ItemID
-end
-
-local function Refresh()
-    local now = os.clock()
+function Weapon.Update(player, now)
     if now < s_NextRefresh then return end
-    s_NextRefresh = now + REFRESH_INTERVAL
+    s_NextRefresh = now + REFRESH
 
-    s_Item, s_ItemData, s_ItemID = nil, nil, nil
-    local player = Game.GetPlayer()
-    local transactionSystem = Game.GetTransactionSystem()
-    local item = player and transactionSystem and transactionSystem:GetItemInSlot(player, "AttachmentSlots.WeaponRight") or nil
-    if item then
-        s_Item = item
-        s_ItemData = item:GetItemData()
-        s_ItemID = item:GetItemID()
+    local system = Game.GetTransactionSystem()
+    if not system then return end
+    Read(Weapon.Right, player, system, SLOTS.Right)
+    Read(Weapon.Left, player, system, SLOTS.Left)
+end
+
+function Weapon.Refresh()
+    s_NextRefresh = 0
+end
+
+function Weapon.Name(hand)
+    if not hand.Data then return nil end
+    local ok, name = pcall(function() return hand.Data:GetNameAsString() end)
+    if ok and name and name ~= "" then return name end
+    return hand.Record
+end
+
+local function RangedAttack(name)
+    s_RangedAttack = s_RangedAttack or CName.new("RangedAttack")
+    return name ~= nil and name.hash_lo == s_RangedAttack.hash_lo and name.hash_hi == s_RangedAttack.hash_hi
+end
+
+function Weapon.Action(action)
+    if not RangedAttack(action:GetName(action)) then return end
+
+    local kind = action:GetType(action).value
+    if kind == "BUTTON_PRESSED" or kind == "TOGGLE_PRESSED" then
+        s_Shooting = true
+    elseif kind == "BUTTON_RELEASED" or kind == "TOGGLE_RELEASED" then
+        s_Shooting = false
+    elseif kind == "AXIS_CHANGE" then
+        s_Shooting = (action:GetValue(action) or 0) > 0.5
     end
-
-    s_IsRanged = HasTag(s_ItemData, "RangedWeapon")
-    s_IsMelee = HasTag(s_ItemData, "Melee")
-    TrackChange()
-    RefreshLeft(player, transactionSystem)
 end
 
-function Weapon.Tick()
-    Refresh()
+function Weapon.Ranged()
+    return Weapon.Right.Ranged or Weapon.Left.Ranged
 end
 
-function Weapon.GetEquippedRightHand()
-    Refresh()
-    return s_Item, s_ItemData, s_ItemID
+function Weapon.DualWielding()
+    return Weapon.Right.Ranged and Weapon.Left.Ranged
 end
 
-function Weapon.GetEquippedLeftHand()
-    Refresh()
-    return s_Left.Item, s_Left.ItemData, s_Left.ItemID
+function Weapon.Shooting()
+    return s_Shooting and Weapon.Ranged()
 end
 
-function Weapon.IsLeftRangedEquipped()
-    Refresh()
-    return s_Left.IsRanged
-end
-
-function Weapon.GetLeftItemKey()
-    if s_Left.LastItemID == nil then return nil end
-    return s_Left.Generation
-end
-
-function Weapon.IsRangedEquipped()
-    Refresh()
-    return s_IsRanged
-end
-
-function Weapon.IsMeleeEquipped()
-    Refresh()
-    return s_IsMelee
-end
-
-function Weapon.IsShootingRanged()
-    return s_IsShooting and Weapon.IsRangedEquipped()
-end
-
-function Weapon.GetCurrentItemKey()
-    if s_LastItemID == nil then return nil end
-    return s_Generation
-end
-
-function Weapon.Invalidate()
+function Weapon.Reset()
+    Clear(Weapon.Right)
+    Clear(Weapon.Left)
+    s_Shooting = false
     s_NextRefresh = 0
 end
 

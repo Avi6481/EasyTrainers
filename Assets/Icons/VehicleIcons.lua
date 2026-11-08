@@ -109,4 +109,6 @@ local Parts = {
     ["yaiba_semimaru"] = { 1, 0.625000, 0.803115, 0.780273, 0.843901, 318, 110 },
 }
 
-return { Sheets = Sheets, Parts = Parts }
+local Manifest = { Sheets = Sheets, Parts = Parts }
+
+return Manifest

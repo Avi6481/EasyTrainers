@@ -1,10 +1,10 @@
 local Input = require("Core/Input")
-local Mouse = require("Core/Mouse")
-local Bindings = require("Controls/Bindings")
-local State = require("Controls/State")
-local Physics = require("Utils/Physics")
-local Rotation = require("Utils/Rotation")
-local Notification = require("UI/Panels/Notification/Notification")
+local State = require("Core/State")
+local Notify = require("Utils/Notify")
+local Controls = require("Features/WorldEditor/Controls")
+local Physics = require("Features/WorldEditor/Physics")
+local Rotation = require("Features/WorldEditor/Rotation")
+local Entities = require("Features/WorldEditor/Entities")
 local FreeCam = require("Features/WorldEditor/FreeCam")
 local Inspector = require("Features/WorldEditor/Inspector")
 local Selection = require("Features/WorldEditor/Selection")
@@ -12,22 +12,20 @@ local Grabbables = require("Features/WorldEditor/Grabbables")
 local Attachments = require("Features/WorldEditor/Attachments")
 local Scene = require("Features/WorldEditor/Scene")
 local Changes = require("Features/WorldEditor/Changes")
-local Entities = require("Utils/Entities")
 
-local Grab = {}
-
-Grab.HoldDelay = { value = 0.25, min = 0.1, max = 1.0, step = 0.05, unit = "s" }
-Grab.KeepFacing = { value = true }
-Grab.SnapPedsToGround = { value = true }
-Grab.NudgeSpeed = { value = 0.5, min = 0.05, max = 5.0, step = 0.05, unit = "m/s" }
-Grab.RotateSpeed = { value = 1.0, min = 0.1, max = 5.0, step = 0.1, unit = "x" }
+local Grab = {
+    HoldDelay = 0.25,
+    KeepFacing = true,
+    SnapPedsToGround = true,
+    NudgeSpeed = 0.5,
+    RotateSpeed = 1.0
+}
 
 local MIN_DISTANCE = 1.5
 local MAX_DISTANCE = 80
 local WHEEL_STEP = 1.12
 local DISTANCE_RATE = 2
 local SETTLE_DELAY = 0.3
-local MOUSE_KEYS = { [Input.VK.LBUTTON] = Mouse.IsDown, [Input.VK.RBUTTON] = Mouse.IsRightDown }
 
 local s_Carry = nil
 local s_Adjust = nil
@@ -36,6 +34,7 @@ local s_ButtonHeld = false
 local s_GroundHeld = false
 
 local Safe = Entities.Safe
+local SameEntity = Entities.Same
 
 local function Clamp(value, minimum, maximum)
     return math.max(minimum, math.min(maximum, value))
@@ -46,21 +45,11 @@ local function Distance(a, b)
 end
 
 local function InputAllowed()
-    return not State.MouseEnabled and not State.OverlayOpen and not State.TypingEnabled and not State.BindingKey
-end
-
-local function MouseFallback(action)
-    local binding = Bindings.Actions[action]
-    for _, key in ipairs(binding and binding.keys or {}) do
-        local isDown = MOUSE_KEYS[key]
-        if isDown and isDown() then return true end
-    end
-    return false
+    return not (State.Menu.Open and State.Menu.Cursor) and not Controls.Blocked()
 end
 
 local function IsDown(action)
-    if not InputAllowed() then return false end
-    return Bindings.IsActionDown(action) or MouseFallback(action)
+    return InputAllowed() and Controls.Held(action)
 end
 
 local function Axis(positive, negative)
@@ -85,7 +74,7 @@ end
 
 local function ReleaseOptions(entity)
     local attached = Attachments.IsAttached(entity)
-    return { SnapToGround = Grab.SnapPedsToGround.value and not attached, KeepCollision = attached }
+    return { SnapToGround = Grab.SnapPedsToGround and not attached, KeepCollision = attached }
 end
 
 local function DisableCollision(entity)
@@ -111,7 +100,7 @@ local function BlockAdjust(message)
     Attachments.EndMove(s_Adjust.Entity)
     s_Adjust.Held = nil
     s_Adjust.Blocked = true
-    Notification.Warning(message)
+    Notify.Warning(message)
 end
 
 local function BeginAdjust(selected)
@@ -132,7 +121,7 @@ local function BeginAdjust(selected)
         LastInput = os.clock()
     }
     if selected.Kind == "Vehicle" and not Physics.LeaveTraffic(entity) then
-        BlockAdjust("This car couldn't be taken out of traffic, so it can't be moved.")
+        BlockAdjust(L("notify.worldeditor.traffic.move"))
         return nil
     end
     Attachments.BeginMove(entity)
@@ -146,7 +135,7 @@ local function StartCarry(target)
     local entity = target.Entity
     EndAdjust()
     if target.Kind == "Vehicle" and not Physics.LeaveTraffic(entity) then
-        Notification.Warning("This car couldn't be taken out of traffic, so it can't be picked up.")
+        Notify.Warning(L("notify.worldeditor.traffic.carry"))
         return
     end
 
@@ -184,8 +173,6 @@ function Grab.IsBusy()
     return s_Carry ~= nil or (s_Adjust ~= nil and not s_Adjust.Blocked)
 end
 
-local SameEntity = Entities.Same
-
 function Grab.IsMoving(entity)
     return (s_Carry ~= nil and SameEntity(s_Carry.Held.Entity, entity)) or (s_Adjust ~= nil and SameEntity(s_Adjust.Entity, entity))
 end
@@ -195,7 +182,7 @@ function Grab.IsGrounded()
 end
 
 function Grab.CanNudge()
-    return not State.MenuOpen
+    return not State.Menu.Open
 end
 
 function Grab.GetTarget()
@@ -221,27 +208,32 @@ local function ReadRotation(active)
     local yaw, pitch = FreeCam.ConsumeLockedLook()
     if not active then return 0, 0 end
 
-    local scale = Grab.RotateSpeed.value
-    if Bindings.IsActionDown("EDITOR_SLOW") then scale = scale * FreeCam.SlowMultiplier.value end
+    local scale = Grab.RotateSpeed
+    if Controls.Held("Slow") then scale = scale * FreeCam.SlowMultiplier end
     return yaw * scale, pitch * scale
 end
 
 local function NudgeInput()
     if not Grab.CanNudge() then return 0, 0 end
-    return Axis("EDITOR_ADJUST_FORWARD", "EDITOR_ADJUST_BACKWARD"), Axis("EDITOR_ADJUST_RIGHT", "EDITOR_ADJUST_LEFT")
+    return Axis("NudgeForward", "NudgeBack"), Axis("NudgeRight", "NudgeLeft")
 end
 
-local function Carry(deltaTime, yaw, pitch, grounded)
-    local wheel = InputAllowed() and Mouse.GetWheel() or 0
+local function Wheel()
+    if State.Menu.Open or State.OverlayOpen then return 0 end
+    return Input.MouseWheel()
+end
+
+local function Carry(delta, yaw, pitch, grounded)
+    local wheel = Wheel()
     if wheel ~= 0 then s_Carry.Distance = Clamp(s_Carry.Distance * (WHEEL_STEP ^ wheel), MIN_DISTANCE, MAX_DISTANCE) end
     local push = NudgeInput()
     if push ~= 0 then
-        local scale = DISTANCE_RATE ^ (push * FreeCam.SpeedMultiplier * deltaTime)
+        local scale = DISTANCE_RATE ^ (push * FreeCam.SpeedMultiplier * delta)
         s_Carry.Distance = Clamp(s_Carry.Distance * scale, MIN_DISTANCE, MAX_DISTANCE)
     end
 
     local cameraYaw = FreeCam.GetRotation()
-    if Grab.KeepFacing.value then yaw = yaw + cameraYaw - s_Carry.CameraYaw end
+    if Grab.KeepFacing then yaw = yaw + cameraYaw - s_Carry.CameraYaw end
     s_Carry.CameraYaw = cameraYaw
     s_Carry.Rotation = Turn(s_Carry.Rotation, yaw, pitch)
 
@@ -261,12 +253,12 @@ local function Carry(deltaTime, yaw, pitch, grounded)
     end
 
     if not Physics.Move(s_Carry.Held, Vector4.new(x, y, z, 1.0), s_Carry.Rotation) then
-        Notification.Warning("This entity can't be moved.")
+        Notify.Warning(L("notify.worldeditor.cantmove"))
         Grab.Drop()
     end
 end
 
-local function Adjust(deltaTime, yaw, pitch, groundPressed)
+local function Adjust(delta, yaw, pitch, groundPressed)
     local selected = Selection.Count() == 1 and Selection.Get() or nil
     if not selected or not selected.Entity then
         EndAdjust()
@@ -285,7 +277,7 @@ local function Adjust(deltaTime, yaw, pitch, groundPressed)
     adjust.LastInput = os.clock()
 
     local radians = math.rad((FreeCam.GetRotation()))
-    local step = Grab.NudgeSpeed.value * FreeCam.SpeedMultiplier * deltaTime
+    local step = Grab.NudgeSpeed * FreeCam.SpeedMultiplier * delta
     adjust.Position.x = adjust.Position.x + (-math.sin(radians) * forward + math.cos(radians) * right) * step
     adjust.Position.y = adjust.Position.y + (math.cos(radians) * forward + math.sin(radians) * right) * step
     adjust.Rotation = Turn(adjust.Rotation, yaw, pitch)
@@ -297,7 +289,7 @@ local function Adjust(deltaTime, yaw, pitch, groundPressed)
     end
 
     local position = Vector4.new(adjust.Position.x, adjust.Position.y, adjust.Position.z, 1.0)
-    if not Physics.Place(adjust.Entity, position, adjust.Rotation) then BlockAdjust("This entity can't be moved.") end
+    if not Physics.Place(adjust.Entity, position, adjust.Rotation) then BlockAdjust(L("notify.worldeditor.cantmove")) end
 end
 
 local function Click(target)
@@ -308,7 +300,7 @@ local function Click(target)
     end
 end
 
-function Grab.Tick(deltaTime)
+function Grab.Tick(delta)
     if not FreeCam.IsReady() then
         Grab.Drop()
         s_Press = nil
@@ -318,12 +310,12 @@ function Grab.Tick(deltaTime)
         return
     end
 
-    local down = IsDown("EDITOR_SELECT")
+    local down = IsDown("Select")
     local now = os.clock()
 
-    if down and not s_ButtonHeld then s_Press = { Time = now, Target = Inspector.Target, Multi = IsDown("EDITOR_MULTI") } end
+    if down and not s_ButtonHeld then s_Press = { Time = now, Target = Inspector.Target } end
 
-    if down and s_Press and not s_Press.Carried and not s_Press.Multi and now - s_Press.Time >= Grab.HoldDelay.value then
+    if down and s_Press and not s_Press.Carried and now - s_Press.Time >= Grab.HoldDelay then
         s_Press.Carried = true
         local target = s_Press.Target
         if target and target.Entity then StartCarry(target) end
@@ -332,8 +324,6 @@ function Grab.Tick(deltaTime)
     if not down and s_ButtonHeld then
         if s_Carry then
             Grab.Drop()
-        elseif s_Press and s_Press.Multi then
-            Selection.Toggle(s_Press.Target)
         elseif s_Press and not s_Press.Carried then
             Click(s_Press.Target)
         end
@@ -342,15 +332,15 @@ function Grab.Tick(deltaTime)
     s_ButtonHeld = down
 
     local hasSubject = s_Carry ~= nil or Selection.Count() == 1
-    local yaw, pitch = ReadRotation(hasSubject and IsDown("EDITOR_ROTATE"))
-    local ground = IsDown("EDITOR_GROUND")
+    local yaw, pitch = ReadRotation(hasSubject and IsDown("Rotate"))
+    local ground = IsDown("Ground")
     local groundPressed = ground and not s_GroundHeld
     s_GroundHeld = ground
 
     if s_Carry then
-        Carry(deltaTime or 0, yaw, pitch, ground)
+        Carry(delta or 0, yaw, pitch, ground)
     else
-        Adjust(deltaTime or 0, yaw, pitch, groundPressed)
+        Adjust(delta or 0, yaw, pitch, groundPressed)
     end
 end
 

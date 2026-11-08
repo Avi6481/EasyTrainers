@@ -1,0 +1,70 @@
+{
+ "Total": 13355,
+ "Categories": [
+  {
+   "Key": "mainstory",
+   "File": "MainStory",
+   "Count": 1300
+  },
+  {
+   "Key": "sidejobs",
+   "File": "SideJobs",
+   "Count": 738
+  },
+  {
+   "Key": "romance",
+   "File": "Romance",
+   "Count": 221
+  },
+  {
+   "Key": "minorquests",
+   "File": "MinorQuests",
+   "Count": 632
+  },
+  {
+   "Key": "gigs",
+   "File": "Gigs",
+   "Count": 1411
+  },
+  {
+   "Key": "ncpd",
+   "File": "Ncpd",
+   "Count": 826
+  },
+  {
+   "Key": "phantomliberty",
+   "File": "PhantomLiberty",
+   "Count": 1623
+  },
+  {
+   "Key": "dogtown",
+   "File": "Dogtown",
+   "Count": 1839
+  },
+  {
+   "Key": "holocalls",
+   "File": "Holocalls",
+   "Count": 1187
+  },
+  {
+   "Key": "openworld",
+   "File": "OpenWorld",
+   "Count": 1675
+  },
+  {
+   "Key": "vehicles",
+   "File": "Vehicles",
+   "Count": 153
+  },
+  {
+   "Key": "system",
+   "File": "System",
+   "Count": 380
+  },
+  {
+   "Key": "fixes",
+   "File": "Fixes",
+   "Count": 1370
+  }
+ ]
+}

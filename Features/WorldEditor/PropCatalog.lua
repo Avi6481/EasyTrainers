@@ -2,14 +2,21 @@ local Logger = require("Core/Logger")
 
 local PropCatalog = {}
 
-local DATA_MODULE = "Assets/Props/PropCatalog"
+local DATA_MODULE = "Data/PropCatalog"
 local SEARCH_LIMIT = 200
 
 local s_Categories = nil
 local s_All = nil
 local s_ByHash = nil
 
-local function Load()
+local function Matches(text, words)
+    for _, word in ipairs(words) do
+        if not text:find(word, 1, true) then return false end
+    end
+    return true
+end
+
+function PropCatalog.Load()
     if s_Categories then return end
     s_Categories, s_All = {}, {}
 
@@ -50,19 +57,21 @@ local function Load()
     Logger.Log(string.format("PropCatalog: loaded %d props in %d categories", #s_All, #s_Categories))
 end
 
+function PropCatalog.IsLoaded()
+    return s_Categories ~= nil
+end
+
 function PropCatalog.GetCategories()
-    Load()
-    return s_Categories
+    return s_Categories or {}
 end
 
 function PropCatalog.Count()
-    Load()
-    return #s_All
+    return s_All and #s_All or 0
 end
 
 function PropCatalog.FindByTemplateHash(hash)
     if not hash or hash == "" or not EasyEntityTools then return nil end
-    Load()
+    PropCatalog.Load()
     if not s_ByHash then
         s_ByHash = {}
         for _, entry in ipairs(s_All) do
@@ -76,13 +85,15 @@ function PropCatalog.FindByTemplateHash(hash)
 end
 
 function PropCatalog.Search(text)
-    Load()
     local results = {}
-    local needle = (text or ""):lower()
-    if needle == "" then return results end
+    if not s_All then return results end
+
+    local words = {}
+    for word in (text or ""):lower():gmatch("[^ ]+") do table.insert(words, word) end
+    if #words == 0 then return results end
 
     for _, entry in ipairs(s_All) do
-        if entry.Search:find(needle, 1, true) then
+        if Matches(entry.Search, words) then
             table.insert(results, entry)
             if #results >= SEARCH_LIMIT then break end
         end

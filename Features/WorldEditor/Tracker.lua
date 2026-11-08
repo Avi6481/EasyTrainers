@@ -1,4 +1,4 @@
-local Entities = require("Utils/Entities")
+local Entities = require("Features/WorldEditor/Entities")
 
 local Tracker = {}
 

@@ -1,14 +1,14 @@
-local Physics = require("Utils/Physics")
+local Physics = require("Features/WorldEditor/Physics")
+local Entities = require("Features/WorldEditor/Entities")
 local FreeCam = require("Features/WorldEditor/FreeCam")
 local Picker = require("Features/WorldEditor/Picker")
 local Grabbables = require("Features/WorldEditor/Grabbables")
 local PropSpawner = require("Features/WorldEditor/PropSpawner")
 local Scene = require("Features/WorldEditor/Scene")
-local Entities = require("Utils/Entities")
 
-local Inspector = {}
-
-Inspector.TraceDistance = { value = 200, min = 10, max = 1000, step = 10, unit = "m" }
+local Inspector = {
+    TraceDistance = 200
+}
 
 Inspector.Camera = nil
 Inspector.Hit = nil
@@ -18,6 +18,7 @@ Inspector.NativePicking = false
 
 local REFRESH_INTERVAL = 0.1
 local RESOLVE_TOLERANCE = 0.5
+local EYE_HEIGHT = 1.7
 local COLLISION_GROUPS = {
     "Static", "Dynamic", "Vehicle", "Terrain", "Water", "Destructible", "Debris", "Interaction", "Shooting", "NPCTraceObstacle"
 }
@@ -28,6 +29,8 @@ local s_GroupNames = {}
 local s_NativeChecked = false
 
 local Safe = Entities.Safe
+local EntityHash = Entities.Hash
+local SameEntity = Entities.Same
 
 local function Copy(vector)
     if not vector then return nil end
@@ -69,7 +72,7 @@ local function ReadCamera(player)
     if not activeForward then return nil end
     local origin = player:GetWorldPosition()
     local yaw, pitch = FreeCam.AnglesFromForward(activeForward)
-    return { Position = { x = origin.x, y = origin.y, z = origin.z + 1.7 }, Forward = activeForward, Yaw = yaw, Pitch = pitch }
+    return { Position = { x = origin.x, y = origin.y, z = origin.z + EYE_HEIGHT }, Forward = activeForward, Yaw = yaw, Pitch = pitch }
 end
 
 local function GroupName(group)
@@ -117,7 +120,7 @@ end
 
 local function Trace(camera)
     local origin = camera.Position
-    local distance = Inspector.TraceDistance.value
+    local distance = Inspector.TraceDistance
     local from = Vector4.new(origin.x, origin.y, origin.z, 1.0)
     local to = Vector4.new(origin.x + camera.Forward.x * distance, origin.y + camera.Forward.y * distance,
         origin.z + camera.Forward.z * distance, 1.0)
@@ -132,8 +135,6 @@ local function RecordName(object)
     return text
 end
 
-local EntityHash = Entities.Hash
-
 local function KnownName(object)
     local entry = PropSpawner.GetEntry(object)
     return entry and entry.Name or Scene.GetName(object)
@@ -146,7 +147,7 @@ local function DescribeEntity(object, kind, camera)
     return {
         Entity = object,
         Kind = kind,
-        ClassName = NameString(Safe(function() return object:GetClassName() end)) or "Unknown",
+        ClassName = NameString(Safe(function() return object:GetClassName() end)) or L("worldeditor.unknown"),
         DisplayName = (displayName ~= nil and displayName ~= "" and displayName) or KnownName(object),
         Record = RecordName(object),
         Appearance = NameString(Safe(function() return object:GetCurrentAppearanceName() end)),
@@ -173,29 +174,40 @@ local function ResolveNative(camera, hits)
         if entity and not IsPlayer(entity) then
             local target = DescribeEntity(entity, Picker.Classify(entity), camera)
             target.Group = hit.Group
-            return target
+            return target, hit.Distance
         end
     end
     return nil
 end
 
+local function PickPed(camera, hits)
+    local nearest = hits[1]
+    local entity, kind, distance = Picker.Pick(camera.Position, camera.Forward, nearest and nearest.Distance, "Ped")
+    if not entity or IsPlayer(entity) then return nil end
+    return DescribeEntity(entity, kind, camera), distance
+end
+
 local function ReadTarget(camera, hits)
-    if NativeSupported() then return ResolveNative(camera, hits) end
+    if NativeSupported() then
+        local target, hitDistance = ResolveNative(camera, hits)
+        if target and target.Kind == "Ped" then return target end
+        local ped, pedDistance = PickPed(camera, hits)
+        if ped and (not target or pedDistance < hitDistance) then return ped end
+        return target
+    end
 
     local hit = hits[1]
     local entity, kind = Picker.Pick(camera.Position, camera.Forward, hit and hit.Distance)
     if entity then return DescribeEntity(entity, kind, camera) end
 
     local groupKind = hit and GROUP_KINDS[hit.Group]
-    if groupKind then return { Kind = groupKind, ClassName = "Unresolved", Position = hit.Position, Distance = hit.Distance } end
+    if groupKind then return { Kind = groupKind, ClassName = L("worldeditor.unresolved"), Position = hit.Position, Distance = hit.Distance } end
     return nil
 end
 
-local SameEntity = Entities.Same
-
 local function PickByBounds(camera, hits, target)
     local nearest = hits[1]
-    local limit = nearest and (nearest.Distance + RESOLVE_TOLERANCE) or Inspector.TraceDistance.value
+    local limit = nearest and (nearest.Distance + RESOLVE_TOLERANCE) or Inspector.TraceDistance
     local entity, distance = Grabbables.Pick(camera.Position, camera.Forward, limit)
     if not entity then return target end
     if target and target.Entity and SameEntity(target.Entity, entity) then return target end

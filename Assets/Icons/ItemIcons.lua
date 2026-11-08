@@ -1296,4 +1296,6 @@ local Parts = {
     ["ying_yang_medallion"] = { 2, 0.227539, 0.318428, 0.293945, 0.357740, 136, 160 },
 }
 
-return { Sheets = Sheets, Parts = Parts }
+local Manifest = { Sheets = Sheets, Parts = Parts }
+
+return Manifest

@@ -2,80 +2,81 @@ local Logger = require("Core/Logger")
 
 local Inventory = {}
 
-local function LocalizedName(tweakID)
-    local name = Game.GetLocalizedTextByKey(TDB.GetLocKey(tweakID .. ".displayName"))
-    if not name or name == "" then return tweakID end
-    return name
+local function List(player, system)
+    local ok, found, items = pcall(function() return system:GetItemList(player) end)
+    if ok and found and type(items) == "table" then return items end
+    return {}
 end
 
-function Inventory.GiveItem(tweakID, quantity)
-    if not tweakID or tweakID == "" then
-        Logger.Log("Inventory: invalid TweakDBID passed to GiveItem")
-        return false
-    end
+function Inventory.Give(record, count)
+    if not record or record == "" then return false end
 
-    quantity = quantity or 1
-    local ok, err = pcall(Game.AddToInventory, tweakID, quantity)
-    if not ok then
-        Logger.Log(string.format("Inventory: failed to give %s (%s)", tweakID, tostring(err)))
-        return false
-    end
-
-    Logger.Log(string.format("Inventory: gave %d x %s", quantity, tweakID))
-    return true
+    local ok, err = pcall(Game.AddToInventory, record, count or 1)
+    if not ok then Logger.Log("Inventory: couldn't give " .. record .. " (" .. tostring(err) .. ")") end
+    return ok
 end
 
-function Inventory.RemoveItem(tweakID, quantity)
-    if not tweakID or tweakID == "" then
-        Logger.Log("Inventory: invalid TweakDBID passed to RemoveItem")
-        return false
+function Inventory.Counts(player)
+    local system = Game.GetTransactionSystem()
+    local counts = {}
+    if not player or not system then return counts end
+
+    for _, data in ipairs(List(player, system)) do
+        local id = data:GetID()
+        local record = TDBID.ToStringDEBUG(id.id)
+        counts[record] = (counts[record] or 0) + (data:GetQuantity() or 1)
     end
+    return counts
+end
 
-    if not TweakDB:GetRecord(tweakID) then
-        Logger.Log(string.format("Inventory: '%s' is not a valid item ID", tweakID))
-        return false
+function Inventory.Find(player, record)
+    local system = Game.GetTransactionSystem()
+    if not player or not system then return nil end
+
+    for _, data in ipairs(List(player, system)) do
+        if TDBID.ToStringDEBUG(data:GetID().id) == record then return data end
     end
+    return nil
+end
 
-    quantity = quantity or 1
+function Inventory.Remove(player, record, count)
+    local system = Game.GetTransactionSystem()
+    if not player or not system or not record then return 0 end
 
-    local player = Game.GetPlayer()
-    local transactionSystem = Game.GetTransactionSystem()
-    local ok, items = transactionSystem:GetItemList(player)
-    if not ok then return false end
-
-    for _, item in ipairs(items) do
-        local itemID = item:GetID()
-        if TDBID.ToStringDEBUG(itemID.id) == tweakID and transactionSystem:GetItemQuantity(player, itemID) >= quantity then
-            transactionSystem:RemoveItemByTDBID(player, tweakID, quantity)
-            Logger.Log(string.format("Inventory: removed %d x %s", quantity, LocalizedName(tweakID)))
-            return true
+    local removed = 0
+    count = count or 1
+    for _, data in ipairs(List(player, system)) do
+        if removed >= count then break end
+        local id = data:GetID()
+        if TDBID.ToStringDEBUG(id.id) == record then
+            local take = math.min(count - removed, data:GetQuantity() or 1)
+            local ok = pcall(function() system:RemoveItem(player, id, take) end)
+            if ok then removed = removed + take end
         end
     end
-
-    Logger.Log(string.format("Inventory: item not found or insufficient quantity (%s)", tweakID))
-    return false
+    return removed
 end
 
-function Inventory.GetAllItems()
-    local player = Game.GetPlayer()
-    local transactionSystem = Game.GetTransactionSystem()
-    local result = {}
+function Inventory.RemoveMany(player, counts)
+    local system = Game.GetTransactionSystem()
+    if not player or not system or not counts then return 0 end
 
-    local ok, items = transactionSystem:GetItemList(player)
-    if not ok then return result end
-
-    for _, item in ipairs(items) do
-        local itemID = item:GetID()
-        local tweakID = TDBID.ToStringDEBUG(itemID.id)
-        table.insert(result, {
-            id = tweakID,
-            name = LocalizedName(tweakID),
-            quantity = transactionSystem:GetItemQuantity(player, itemID) or 1,
-            raw = item
-        })
+    local removed = 0
+    local taken = {}
+    for _, data in ipairs(List(player, system)) do
+        local id = data:GetID()
+        local record = TDBID.ToStringDEBUG(id.id)
+        local left = (counts[record] or 0) - (taken[record] or 0)
+        if left > 0 then
+            local take = math.min(left, data:GetQuantity() or 1)
+            local ok = pcall(function() system:RemoveItem(player, id, take) end)
+            if ok then
+                taken[record] = (taken[record] or 0) + take
+                removed = removed + take
+            end
+        end
     end
-
-    return result
+    return removed
 end
 
 return Inventory

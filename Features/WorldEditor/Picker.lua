@@ -1,18 +1,20 @@
-local Physics = require("Utils/Physics")
-local Entities = require("Utils/Entities")
+local Physics = require("Features/WorldEditor/Physics")
+local Entities = require("Features/WorldEditor/Entities")
 
-local Picker = {}
-
-Picker.SearchRange = { value = 120, min = 20, max = 500, step = 10, unit = "m" }
+local Picker = {
+    SearchRange = 120
+}
 
 Picker.Kinds = {
-    Ped = { Label = "Ped", Color = 0xFF5C5CFF, Radius = 0.6, Height = 1.8 },
-    Vehicle = { Label = "Vehicle", Color = 0xFFFFBE50, Radius = 2.4, Height = 1.5 },
-    Device = { Label = "Device", Color = 0xFF3CC8FF, Radius = 0.7, Height = 0 },
-    Item = { Label = "Item", Color = 0xFFFF78B4, Radius = 0.5, Height = 0 },
-    Prop = { Label = "Prop", Color = 0xFF8CE65A, Radius = 0.8, Height = 0 },
-    Surface = { Label = "Surface", Color = 0xFFE6E6E6 }
+    Ped = { Key = "worldeditor.kinds.ped", Color = 0xFF5C5CFF, Radius = 0.6, Height = 1.8 },
+    Vehicle = { Key = "worldeditor.kinds.vehicle", Color = 0xFFFFBE50, Radius = 2.4, Height = 1.5 },
+    Device = { Key = "worldeditor.kinds.device", Color = 0xFF3CC8FF, Radius = 0.7, Height = 0 },
+    Item = { Key = "worldeditor.kinds.item", Color = 0xFFFF78B4, Radius = 0.5, Height = 0 },
+    Prop = { Key = "worldeditor.kinds.prop", Color = 0xFF8CE65A, Radius = 0.8, Height = 0 },
+    Surface = { Key = "worldeditor.kinds.surface", Color = 0xFFE6E6E6 }
 }
+
+Picker.Classify = Physics.Classify
 
 local CANDIDATE_INTERVAL = 0.5
 local OCCLUSION_MARGIN = 0.75
@@ -22,7 +24,9 @@ local s_NextCandidates = 0
 
 local Safe = Entities.Safe
 
-Picker.Classify = Physics.Classify
+function Picker.Kind(kind)
+    return Picker.Kinds[kind] or Picker.Kinds.Prop
+end
 
 local function RefreshCandidates(player)
     local now = os.clock()
@@ -30,7 +34,7 @@ local function RefreshCandidates(player)
     s_NextCandidates = now + CANDIDATE_INTERVAL
 
     local entities = Safe(function()
-        return player:GetEntitiesAroundObject(Picker.SearchRange.value, TargetSearchQuery.new().searchFilter)
+        return player:GetEntitiesAroundObject(Picker.SearchRange, TargetSearchQuery.new().searchFilter)
     end)
 
     s_Candidates = {}
@@ -51,7 +55,7 @@ local function RaySphere(origin, direction, center, radius)
 end
 
 local function TestCandidate(candidate, origin, direction)
-    local kind = Picker.Kinds[candidate.Kind]
+    local kind = Picker.Kind(candidate.Kind)
     local position = Safe(function() return candidate.Entity:GetWorldPosition() end)
     if not position then return nil end
 
@@ -66,14 +70,14 @@ local function TestCandidate(candidate, origin, direction)
     return best
 end
 
-function Picker.Pick(origin, direction, blockedDistance)
+function Picker.Pick(origin, direction, blockedDistance, onlyKind)
     local player = Game.GetPlayer()
     if not player then return nil end
     RefreshCandidates(player)
 
     local nearest, nearestDistance = nil, nil
     for _, candidate in ipairs(s_Candidates) do
-        local distance = TestCandidate(candidate, origin, direction)
+        local distance = (not onlyKind or candidate.Kind == onlyKind) and TestCandidate(candidate, origin, direction)
         local visible = distance and (not blockedDistance or distance <= blockedDistance + OCCLUSION_MARGIN)
         if visible and (not nearestDistance or distance < nearestDistance) then
             nearest, nearestDistance = candidate, distance

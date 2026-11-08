@@ -1,49 +1,98 @@
-local Buttons = require("UI/Options/Buttons")
-local Submenu = require("UI/Navigation/Submenu")
-local Bindings = require("Controls/Bindings")
-local BindingsConfig = require("Config/BindingsConfig")
-local Registry = require("UI/Registry/OptionRegistry")
-local Weapons = require("Features/Weapons")
+local State = require("Core/State")
+local Submenu = require("Navigation/Submenu")
+local Widgets = require("Widgets/Widgets")
+local Hotkeys = require("Features/Hotkeys/Hotkeys")
+local HotkeyRow = require("View/Settings/HotkeyRow")
 
-local s_Toggles = nil
+local HotkeysView = {}
 
-local function GetToggles()
-    if s_Toggles then return s_Toggles end
+local MAX_LISTED = 10
 
-    s_Toggles = {}
-    for _, entry in ipairs(Registry.GetAll()) do
-        if Registry.IsHotkeyable(entry) then
-            Bindings.EnsureAction(Registry.GetHotkeyAction(entry))
-            table.insert(s_Toggles, entry)
+local s_Menus = {}
+local s_Counts = {}
+local s_BoundDoc = nil
+local s_BoundVersion = nil
+
+local function Count(count)
+    if count == 0 then return nil end
+    if not s_Counts[count] then s_Counts[count] = tostring(count) end
+    return s_Counts[count]
+end
+
+local function BoundInfo()
+    local version = Hotkeys.Version()
+    if s_BoundDoc and s_BoundVersion == version then return s_BoundDoc end
+
+    local bound = Hotkeys.Bound()
+    local doc = {
+        { Kind = "Eyebrow", Text = L("hotkeys.title") },
+        { Kind = "Title", Text = L("hotkeys.bound.label") },
+        { Kind = "Separator" }
+    }
+
+    if #bound == 0 then table.insert(doc, { Kind = "Text", Text = L("hotkeys.bound.none"), Tone = "Soft" }) end
+    for index, definition in ipairs(bound) do
+        if index > MAX_LISTED then
+            table.insert(doc, { Kind = "Text", Text = tip("hotkeys.bound.more", { count = #bound - MAX_LISTED }), Tone = "Dim" })
+            break
         end
+        table.insert(doc, { Kind = "Row", Label = Hotkeys.Name(definition), Value = Widgets.FormatBinding(Hotkeys.Binding(definition)) })
     end
-    return s_Toggles
+
+    s_BoundDoc = doc
+    s_BoundVersion = version
+    return doc
 end
 
-local function ClearAll()
-    for _, entry in ipairs(GetToggles()) do
-        Bindings.Actions[Registry.GetHotkeyAction(entry)] = { keys = {}, btns = {} }
+local function BoundView()
+    local bound = Hotkeys.Bound()
+    if #bound == 0 then
+        Widgets.ValueRow(L("hotkeys.bound.none"), "")
+        Widgets.Tip(L("hotkeys.bound.nonetip"))
+        return
     end
-    BindingsConfig.Save()
+
+    for _, definition in ipairs(bound) do HotkeyRow.Draw(definition) end
 end
 
-local function HotkeysView()
-    local toggles = GetToggles()
-    Buttons.OptionExtended("Bindable Options", "", tostring(#toggles), "Every toggle below can use a keyboard or controller binding. Press Delete (or View on controller) while binding to clear just that one.")
-    Buttons.Option("Clear All Toggle Hotkeys", "Remove every optional toggle binding.", ClearAll)
+local BoundMenu = Submenu.Create("hotkeys.bound.label", BoundView)
 
-    Buttons.Break("Ability Keys")
-    Buttons.Bind("Blackwall", Weapons.BlackwallForce.Action, "Blackwalls the NPC you're looking at. Default: B.")
-    Buttons.Bind("Nitrous Boost", "NITRO", "Held to fire the nitrous boost.")
-
-    local category = nil
-    for _, entry in ipairs(toggles) do
-        if entry.Category ~= category then
-            category = entry.Category
-            Buttons.Break((tostring(category):gsub("^%l", string.upper)))
-        end
-        Buttons.Bind(Registry.GetLabel(entry), Registry.GetHotkeyAction(entry), Registry.GetTip(entry))
+local function CategoryView(category)
+    for index, definition in ipairs(category.List) do
+        if index > 1 and definition.Break then Widgets.Break(L(definition.Break)) end
+        HotkeyRow.Draw(definition)
     end
 end
 
-return Submenu.Create("Hotkeys", HotkeysView)
+for _, category in ipairs(Hotkeys.Categories) do
+    s_Menus[category] = Submenu.Create(category.Title .. ".label", function() CategoryView(category) end)
+end
+
+local function Links()
+    Widgets.SubmenuButton(L("hotkeys.bound.label"), BoundMenu, Count(#Hotkeys.Bound()))
+    Widgets.Tip(L("hotkeys.bound.tip"))
+    Widgets.Info(BoundInfo)
+
+    for _, category in ipairs(Hotkeys.Categories) do
+        Widgets.SubmenuButton(L(category.Title .. ".label"), s_Menus[category], Count(Hotkeys.BoundIn(category)))
+        if Widgets.Selected() then Widgets.Tip(tip("hotkeys.category.tip", { name = category.Title .. ".label" })) end
+    end
+end
+
+local function View()
+    Links()
+
+    Widgets.Break("")
+    if Widgets.KeyBind(L("navigation.togglemenu.label"), State.Hotkeys.ToggleMenu) then Hotkeys.MenuChanged() end
+    Widgets.Tip(L("navigation.togglemenu.tip"))
+    if Widgets.HoldButton(L("hotkeys.clearall.label")) then Hotkeys.ClearAll() end
+    Widgets.Tip(L("hotkeys.clearall.tip"))
+end
+
+HotkeysView.Menu = Submenu.Create("hotkeys.title", View)
+
+function HotkeysView.BoundInfo()
+    return BoundInfo()
+end
+
+return HotkeysView

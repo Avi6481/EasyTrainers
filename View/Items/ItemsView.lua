@@ -1,118 +1,77 @@
-local Buttons = require("UI/Options/Buttons")
-local Submenu = require("UI/Navigation/Submenu")
-local SidePanel = require("UI/Panels/SidePanel/SidePanel")
-local Notification = require("UI/Panels/Notification/Notification")
-local Items = require("Features/Items")
+local Ref = require("Core/Ref")
+local Submenu = require("Navigation/Submenu")
+local Widgets = require("Widgets/Widgets")
+local Items = require("Features/Items/Items")
+local ItemBrowserView = require("View/Items/ItemBrowserView")
+local EssentialsView = require("View/Items/EssentialsView")
 
-local State = Items.BrowserState
+local ItemsView = {}
 
-local function DrawItemControls()
-    Buttons.Dropdown("Inventory Action", State.Action, State.Actions,
-        "Choose whether selecting an item adds it to or removes it from your inventory.")
-    Buttons.Int("Quantity", State.Quantity, "Amount applied each time you select an item.")
-end
+local Actions = Items.Actions
 
-local function SubmitItemInfo(item, section)
-    local description = State.GetDescription(item.id)
-    SidePanel.SubmitInfo("essential-item", {
-        Eyebrow = "ESSENTIAL ITEM",
-        Title = item.name,
-        Icon = item.id,
-        Rows = {
-            { Label = "Section", Value = section },
-            { Label = "Group", Value = item.group or "Other" },
-            { Label = "Owned", Value = tostring(State.GetOwned(item.id)) },
-            { Label = "Action", Value = State.GetAction() .. " " .. tostring(State.Quantity.value) },
-        },
-        Description = (description ~= "" and (description .. "\n\n") or "") .. item.id,
-    }, { Width = 310 })
-end
+local MIN_QUANTITY = 1
 
-local function DrawItemList(title, items)
-    DrawItemControls()
-    Buttons.Break(title .. "  /  " .. tostring(#items))
+local s_EddiesRef = Ref.Field(Actions, "Eddies")
+local s_KitRef = Ref.Field(Actions, "KitQuantity")
 
-    local lastGroup
-    for _, item in ipairs(items) do
-        if item.group ~= lastGroup then
-            Buttons.Break(item.group)
-            lastGroup = item.group
-        end
-        local _, data = Buttons.OptionExtended(item.name, "", State.GetSummary(),
-            "Apply the selected inventory action to this item.", function()
-                State.Apply(item)
-            end)
-        if data and data.Visible and (data.Selected or data.Hovered) then SubmitItemInfo(item, title) end
-    end
-end
-
-local function CraftingView()
-    DrawItemList("Crafting Components", Items.CraftingComponents)
-end
-
-local function ConsumablesView()
-    DrawItemList("Health & Consumables", Items.Consumables)
-end
-
-local function BuffsView()
-    DrawItemList("Boosters & Buffs", Items.Buffs)
-end
-
-local s_BulkQuantity = { value = 1, min = 1, max = 999, step = 1 }
-
-local BULK_ACTIONS = {
-    { name = "All Crafting Components", detail = "Every standard crafting component", action = Items.Actions.GiveAllCraftingComponents },
-    { name = "Item Components", detail = "All item component tiers", action = Items.Actions.GiveItemComponents },
-    { name = "Quickhack Components", detail = "All quickhack component tiers", action = Items.Actions.GiveQuickhackComponents },
-    { name = "Upgrade Components", detail = "All upgrade component tiers", action = Items.Actions.GiveUpgradeComponents },
-    { name = "All Consumables", detail = "MaxDocs, Bounce Backs, and boosters", action = Items.Actions.GiveAllConsumables },
-    { name = "MaxDocs", detail = "Every MaxDoc tier", action = Items.Actions.GiveMaxDocs },
-    { name = "Bounce Backs", detail = "Every Bounce Back tier", action = Items.Actions.GiveBounceBacks },
-    { name = "Boosters", detail = "All standard boosters", action = Items.Actions.GiveBoosters },
-    { name = "All Buff Items", detail = "Black-market, booster, and food buffs", action = Items.Actions.GiveAllBuffs },
+local KITS = {
+    { Key = "components", Action = Actions.GiveAllCraftingComponents },
+    { Key = "upgradecomponents", Action = Actions.GiveUpgradeComponents },
+    { Key = "quickhackcomponents", Action = Actions.GiveQuickhackComponents },
+    { Key = "maxdocs", Action = Actions.GiveMaxDocs },
+    { Key = "bouncebacks", Action = Actions.GiveBounceBacks },
+    { Key = "boosters", Action = Actions.GiveBoosters }
 }
 
-local function BulkView()
-    Buttons.Int("Quantity Per Item", s_BulkQuantity, "Amount of every item included in the selected kit.")
-    Buttons.Break("Quick Kits")
-    for _, entry in ipairs(BULK_ACTIONS) do
-        Buttons.OptionExtended(entry.name, "", "+" .. tostring(s_BulkQuantity.value), entry.detail, function()
-            entry.action(s_BulkQuantity.value)
-            State.RefreshInventory()
-            Notification.Success("Added " .. entry.name, 2)
-        end)
+local function Link(key, menu, badge)
+    local pressed = Widgets.SubmenuButton(L("items." .. key .. ".label"), menu, badge)
+    Widgets.Tip(L("items." .. key .. ".tip"))
+    return pressed
+end
+
+local function Links()
+    Link("catalog", ItemBrowserView.CatalogMenu, ItemBrowserView.Badge("catalog"))
+    if Link("owned", ItemBrowserView.OwnedMenu, ItemBrowserView.Badge("owned")) then ItemBrowserView.OpenOwned() end
+    Link("recent", ItemBrowserView.RecentMenu, ItemBrowserView.Badge("recent"))
+    Link("essentials", EssentialsView.Menu)
+end
+
+local function QuickAdd()
+    Widgets.Break(L("items.quickadd"))
+
+    if Widgets.NumberActionInt(L("items.eddies.label"), s_EddiesRef, Actions.MIN_EDDIES, Actions.MAX_EDDIES, Actions.EDDIES_STEP, "%d") then
+        local amount = Actions.Eddies
+        Items.Run(function() Actions.AddEddies(amount) end)
     end
-end
+    Widgets.Tip(L("items.eddies.tip"))
 
-local RECIPE_ACTIONS = {
-    { name = "Mod Recipes", detail = "Cyberware and weapon mod recipes", action = Items.ModRecipes.GiveAllModRecipes },
-    { name = "Quickhack Recipes", detail = "All quickhack crafting recipes", action = Items.QuickhackRecipes.GiveAllQuickhackRecipes },
-    { name = "Weapon Recipes", detail = "All weapon crafting recipes", action = Items.WeaponRecipes.GiveAllWeaponRecipes },
-    { name = "Clothing Recipes", detail = "All clothing crafting recipes", action = Items.ClothingRecipes.GiveAllClothingRecipes },
-    { name = "Grenade Recipes", detail = "All grenade crafting recipes", action = Items.GrenadeRecipes.GiveAllGrenadeRecipes },
-}
+    Widgets.SliderInt(L("items.kits.quantity.label"), s_KitRef, MIN_QUANTITY, Actions.MAX_QUANTITY, 1)
+    Widgets.Tip(L("items.kits.quantity.tip"))
 
-local function RecipesView()
-    for _, entry in ipairs(RECIPE_ACTIONS) do
-        Buttons.Option(entry.name, entry.detail, function()
-            entry.action()
-            Notification.Success("Unlocked " .. entry.name, 2)
-        end)
+    local amount = Actions.KitQuantity
+    for _, entry in ipairs(KITS) do EssentialsView.Kit(entry, amount) end
+
+    if Widgets.HoldButton(L("items.recipes.all.label")) then
+        Items.Run(function() Actions.Recipes(Actions.UnlockAllRecipes) end)
     end
+    Widgets.Tip(L("items.recipes.all.tip"))
 end
 
-local BulkMenu = Submenu.Create("Quick Kits", BulkView)
-local CraftingMenu = Submenu.Create("Crafting Components", CraftingView)
-local ConsumablesMenu = Submenu.Create("Health & Consumables", ConsumablesView)
-local BuffsMenu = Submenu.Create("Boosters & Buffs", BuffsView)
-local RecipesMenu = Submenu.Create("Crafting Recipes", RecipesView)
-
-local function ItemsMainView()
-    Buttons.Submenu("Quick Kits", BulkMenu, "Add complete groups of commonly used items.")
-    Buttons.Submenu("Crafting Components", CraftingMenu, "Add or remove individual crafting components.")
-    Buttons.Submenu("Health & Consumables", ConsumablesMenu, "Manage MaxDocs, Bounce Backs, and boosters.")
-    Buttons.Submenu("Boosters & Buffs", BuffsMenu, "Manage temporary buff items and special consumables.")
-    Buttons.Submenu("Crafting Recipes", RecipesMenu, "Unlock complete groups of crafting recipes.")
+local function Database()
+    Widgets.Break(L("items.database.title"))
+    if Widgets.Button(L("items.database.reload.label")) then Items.Catalog.Reload() end
+    Widgets.Tip(L("items.database.reload.tip"))
 end
 
-return Submenu.Create("Essentials", ItemsMainView)
+local function View()
+    Items.Watch()
+    if ItemBrowserView.Search() then return end
+
+    Links()
+    QuickAdd()
+    Database()
+end
+
+ItemsView.Menu = Submenu.Create("items.title", View)
+
+return ItemsView

@@ -1,9 +1,9 @@
 local Logger = require("Core/Logger")
-local Physics = require("Utils/Physics")
-local Rotation = require("Utils/Rotation")
+local Physics = require("Features/WorldEditor/Physics")
+local Rotation = require("Features/WorldEditor/Rotation")
+local Entities = require("Features/WorldEditor/Entities")
 local Tracker = require("Features/WorldEditor/Tracker")
 local Changes = require("Features/WorldEditor/Changes")
-local Entities = require("Utils/Entities")
 
 local Attachments = {}
 
@@ -107,19 +107,39 @@ local function Unbind(entity)
     return unbound
 end
 
-local function Release(entry)
+local function Release(entry, keepFrozen)
     Physics.RestoreCollision(entry.Collision)
+    if entry.Frozen and keepFrozen then return end
+    if entry.Frozen then
+        Physics.SetMovable(entry.Child, true)
+        entry.Frozen = false
+    end
     Physics.Release(entry.Held, {})
 end
 
 local function Hold(entry, kind)
     entry.Held = Physics.Hold(entry.Child, kind)
     entry.Collision = Physics.DisableCollision(entry.Child)
+    entry.Frozen = entry.Held.Kind == "Vehicle" and Physics.SetMovable(entry.Child, false)
 end
 
 function Attachments.Get(entity)
     local index = FindIndex(Hash(entity))
     return index and s_List[index] or nil
+end
+
+function Attachments.GetByHash(hash)
+    local index = hash and FindIndex(hash)
+    return index and s_List[index] or nil
+end
+
+function Attachments.ChildrenOf(hash)
+    local children = {}
+    if not hash then return children end
+    for _, entry in ipairs(s_List) do
+        if entry.ParentHash == hash then table.insert(children, entry) end
+    end
+    return children
 end
 
 function Attachments.IsAttached(entity)
@@ -132,6 +152,13 @@ end
 
 function Attachments.Count()
     return #s_List
+end
+
+function Attachments.Offset(child, parent)
+    local parentPosition, parentRotation = Pose(parent)
+    local childPosition, childRotation = Pose(child)
+    if not parentPosition or not childPosition then return nil end
+    return Relative(parentPosition, parentRotation, childPosition, childRotation)
 end
 
 function Attachments.GetLocal(child)
@@ -153,13 +180,13 @@ end
 
 function Attachments.Attach(child, parent, names, localPosition, localRotation)
     local childHash, parentHash = Hash(child), Hash(parent)
-    if not childHash or not parentHash then return false, "Couldn't read those entities." end
-    if childHash == parentHash then return false, "A prop can't be attached to itself." end
-    if WouldLoop(childHash, parentHash) then return false, "That would attach the prop to something already attached to it." end
-    if FindIndex(childHash) then return false, "That prop is already attached. Detach it first." end
+    if not childHash or not parentHash then return false, L("notify.worldeditor.attach.unreadable") end
+    if childHash == parentHash then return false, L("notify.worldeditor.attach.self") end
+    if WouldLoop(childHash, parentHash) then return false, L("notify.worldeditor.attach.loop") end
+    if FindIndex(childHash) then return false, L("notify.worldeditor.attach.already") end
 
     local _, targetName = BindTarget(parent)
-    if not targetName then return false, "The game can't attach things to that entity." end
+    if not targetName then return false, L("notify.worldeditor.attach.nobind") end
 
     names = names or {}
     local entry = {
@@ -167,20 +194,24 @@ function Attachments.Attach(child, parent, names, localPosition, localRotation)
         ChildHash = childHash,
         Parent = parent,
         ParentHash = parentHash,
-        Name = names.Name or "Prop",
-        ParentName = names.ParentName or "Entity"
+        Name = names.Name or L("worldeditor.prop"),
+        ParentName = names.ParentName or L("worldeditor.entity")
     }
     if localPosition and localRotation then
         entry.LocalPosition = { x = localPosition.x, y = localPosition.y, z = localPosition.z }
         entry.LocalRotation = Rotation.Normalize(localRotation)
     elseif not UpdateLocal(entry) then
-        return false, "Couldn't read those entities' positions."
+        return false, L("notify.worldeditor.attach.nopositions")
     end
 
     Hold(entry, names.Kind)
+    if entry.Held.Kind == "Vehicle" and not entry.Frozen then
+        Release(entry)
+        return false, L("notify.worldeditor.attach.vehicle")
+    end
     if not Bind(entry) then
         Release(entry)
-        return false, "The game couldn't attach those."
+        return false, L("notify.worldeditor.attach.failed")
     end
 
     table.insert(s_List, entry)
@@ -212,7 +243,7 @@ function Attachments.DetachChildrenOf(parent)
     local removed = 0
     if not hash then return removed end
     for index = #s_List, 1, -1 do
-        if s_List[index].ParentHash == hash and Attachments.Detach(s_List[index].Child) then removed = removed + 1 end
+        if s_List[index] and s_List[index].ParentHash == hash and Attachments.Detach(s_List[index].Child) then removed = removed + 1 end
     end
     return removed
 end
@@ -287,7 +318,7 @@ function Attachments.Tick()
 end
 
 function Attachments.Shutdown()
-    for _, entry in ipairs(s_List) do Release(entry) end
+    for _, entry in ipairs(s_List) do Release(entry, true) end
     s_List = {}
 end
 

@@ -1,17 +1,28 @@
 local JsonHelper = require("Core/JsonHelper")
+local Logger = require("Core/Logger")
 local Layout = require("Features/WorldEditor/Layout")
 
 local Saves = {}
 
-local PATH = "Config/JSON/WorldEditorSaves.json"
+local PATH = "Config/WorldEditorSaves.json"
+local LEGACY_PATH = "Config/JSON/WorldEditorSaves.json"
 local VERSION = 1
 
 local s_List = nil
 
+local function Read(path)
+    local data = JsonHelper.ReadOptional(path)
+    if type(data) == "table" and type(data.Saves) == "table" then return data.Saves end
+    return nil
+end
+
 local function Load()
     if s_List then return s_List end
-    local data = JsonHelper.ReadOptional(PATH)
-    s_List = type(data) == "table" and type(data.Saves) == "table" and data.Saves or {}
+    s_List = Read(PATH)
+    if not s_List then
+        s_List = Read(LEGACY_PATH) or {}
+        if #s_List > 0 then Logger.Log(string.format("WorldEditor: read %d saves from %s", #s_List, LEGACY_PATH)) end
+    end
     return s_List
 end
 
@@ -21,7 +32,7 @@ end
 
 local function Clean(name)
     name = tostring(name or ""):gsub("^%s+", ""):gsub("%s+$", "")
-    if name == "" then name = "Scene " .. tostring(#Load() + 1) end
+    if name == "" then name = tip("worldeditor.saves.default", { count = #Load() + 1 }) end
     return name
 end
 
@@ -49,17 +60,24 @@ end
 
 function Saves.Save(name, items)
     local layout, skipped = Layout.Capture(Layout.WithChildren(items))
-    if #layout.Items == 0 then return nil, skipped end
+    if #layout.Items == 0 then return nil, skipped, false end
 
     local save = { Name = Clean(name), Items = layout.Items, Links = layout.Links }
     local index = FindName(save.Name)
+    local previous = index and Load()[index] or nil
     if index then
         Load()[index] = save
     else
         table.insert(Load(), save)
     end
-    if not Write() then return nil, skipped end
-    return save, skipped
+    if Write() then return save, skipped, false end
+
+    if previous then
+        Load()[index] = previous
+    else
+        table.remove(Load())
+    end
+    return nil, skipped, true
 end
 
 function Saves.Load(save, here)

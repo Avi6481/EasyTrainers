@@ -1,52 +1,53 @@
-local Buttons = require("UI/Options/Buttons")
-local Submenu = require("UI/Navigation/Submenu")
-local Handler = require("Controls/Handler")
-local Bindings = require("Controls/Bindings")
-local NavigationConfig = require("Config/NavigationConfig")
+local Ref = require("Core/Ref")
+local Submenu = require("Navigation/Submenu")
+local NavigationStyle = require("Navigation/NavigationStyle")
+local HighlightStyle = require("Widgets/Core/HighlightStyle")
+local Widgets = require("Widgets/Widgets")
 
-local MENU_BINDINGS = {
-    { "openmenu", "TOGGLE" },
-    { "togglemouse", "TOGGLE_MOUSE" },
-    { "up", "UP" },
-    { "down", "DOWN" },
-    { "left", "LEFT" },
-    { "right", "RIGHT" },
-    { "select", "SELECT" },
-    { "back", "BACK" },
-    { "misc", "MISC" }
-}
+local NavigationView = {}
 
-local SPEED_FIELDS = {
-    { Field = "ScrollDelayBase", Key = "scrolldelay", Min = 50, Max = 1000 },
-    { Field = "ScrollMinDelay", Key = "scrollmindelay", Min = 1, Max = 200 },
-    { Field = "AccelThreshold", Key = "accelthreshold", Min = 100, Max = 5000 },
-    { Field = "AccelStep", Key = "accelstep", Min = 1, Max = 100 }
-}
+local s_HoverSelects = Ref.Field(NavigationStyle, "MouseHoverSelects")
+local s_CursorlessClicks = Ref.Field(NavigationStyle, "CursorlessClicks")
+local s_RightClickBack = Ref.Field(NavigationStyle, "RightClickBack")
+local s_WheelScrolls = Ref.Field(NavigationStyle, "MouseWheelNavigation")
+local s_WheelRows = Ref.Field(NavigationStyle, "MouseWheelRows")
+local s_RepeatDelay = Ref.Field(NavigationStyle, "RepeatDelay")
+local s_RepeatRate = Ref.Field(NavigationStyle, "RepeatRate")
+local s_AccelThreshold = Ref.Field(NavigationStyle, "AccelThreshold")
+local s_AccelStep = Ref.Scaled(NavigationStyle, "AccelStep", 1000)
+local s_FastestRate = Ref.Field(NavigationStyle, "RepeatRateFast")
+local s_ScrollSmoothing = Ref.Field(NavigationStyle, "ScrollSmoothTime")
+local s_HighlightSmoothing = Ref.Field(HighlightStyle, "SmoothTime")
 
-local s_SpeedRefs = {}
-for _, field in ipairs(SPEED_FIELDS) do
-    s_SpeedRefs[field.Field] = { value = Handler[field.Field], min = field.Min, max = field.Max }
+local function Toggle(key, ref)
+    Widgets.Toggle(L(key .. ".label"), ref)
+    Widgets.Tip(L(key .. ".tip"))
 end
 
-local function NavigationView()
-    Buttons.Option(L("settings.navigation.save.label"), tip("settings.navigation.save.tip"), NavigationConfig.Save)
-    Buttons.Option(L("settings.navigation.load.label"), tip("settings.navigation.load.tip"), NavigationConfig.Load)
-    Buttons.Option(L("settings.navigation.reset.label"), tip("settings.navigation.reset.tip"), NavigationConfig.Reset)
-    Buttons.Option(L("settings.navigation.resetbindings.label"), tip("settings.navigation.resetbindings.tip"), Bindings.ResetAll)
-
-    Buttons.Break(L("settings.navigation.bindings.label"))
-    for _, binding in ipairs(MENU_BINDINGS) do
-        local key = "settings.navigation.bindings." .. binding[1]
-        Buttons.Bind(L(key .. ".label"), binding[2], tip(key .. ".tip"))
-    end
-
-    Buttons.Break(L("settings.navigation.speed.label"))
-    for _, field in ipairs(SPEED_FIELDS) do
-        local ref = s_SpeedRefs[field.Field]
-        local key = "settings.navigation.speed." .. field.Key
-        ref.value = Handler[field.Field]
-        Buttons.Int(L(key .. ".label"), ref, tip(key .. ".tip"), function(value) Handler[field.Field] = value end)
-    end
+local function Seconds(key, ref, min, max, step)
+    Widgets.SliderFloat(L(key .. ".label"), ref, min, max, step, "%.2fs")
+    Widgets.Tip(L(key .. ".tip"))
 end
 
-return Submenu.Create("settings.navigation.title", NavigationView)
+local function View()
+    Seconds("navigation.repeatdelay", s_RepeatDelay, 0.15, 0.8, 0.05)
+    Seconds("navigation.repeatrate", s_RepeatRate, 0.03, 0.2, 0.01)
+    Seconds("navigation.accelthreshold", s_AccelThreshold, 0.1, 5, 0.05)
+    Widgets.SliderInt(L("navigation.accelstep.label"), s_AccelStep, 0, 50, 1, "%d ms")
+    Widgets.Tip(L("navigation.accelstep.tip"))
+    Seconds("navigation.fastestrate", s_FastestRate, 0.01, 0.1, 0.01)
+    Seconds("navigation.scrollsmoothing", s_ScrollSmoothing, 0.02, 0.3, 0.01)
+    Seconds("navigation.highlightsmoothing", s_HighlightSmoothing, 0.02, 0.3, 0.01)
+
+    Widgets.Break(L("navigation.mouse"))
+    Toggle("navigation.hoverselects", s_HoverSelects)
+    Toggle("navigation.cursorlessclicks", s_CursorlessClicks)
+    Toggle("navigation.rightclickback", s_RightClickBack)
+    Toggle("navigation.wheelscrolls", s_WheelScrolls)
+    Widgets.SliderInt(L("navigation.wheelrows.label"), s_WheelRows, 1, 5, 1)
+    Widgets.Tip(L("navigation.wheelrows.tip"))
+end
+
+NavigationView.Menu = Submenu.Create("navigation.title", View)
+
+return NavigationView

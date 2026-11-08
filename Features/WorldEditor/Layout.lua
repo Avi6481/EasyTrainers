@@ -1,6 +1,6 @@
-local Entities = require("Utils/Entities")
-local Physics = require("Utils/Physics")
-local Rotation = require("Utils/Rotation")
+local Entities = require("Features/WorldEditor/Entities")
+local Physics = require("Features/WorldEditor/Physics")
+local Rotation = require("Features/WorldEditor/Rotation")
 local FreeCam = require("Features/WorldEditor/FreeCam")
 local Inspector = require("Features/WorldEditor/Inspector")
 local Selection = require("Features/WorldEditor/Selection")
@@ -51,7 +51,15 @@ end
 local function WorldEntry(entity, name)
     if Physics.Classify(entity) == "Vehicle" then
         local record = RecordName(entity)
-        if record then return { Name = name or "Vehicle", Category = "Vehicles", Group = "Copied", Record = record, Appearance = Appearance(entity) } end
+        if record then
+            return {
+                Name = name or L("worldeditor.kinds.vehicle"),
+                Category = "Vehicles",
+                Group = "Copied",
+                Record = record,
+                Appearance = Appearance(entity)
+            }
+        end
     end
 
     local hash = EasyEntityTools and Safe(function() return EasyEntityTools.GetTemplatePathHash(entity) end)
@@ -127,7 +135,7 @@ function Layout.Target()
         local hit = Inspector.Hit
         if hit and hit.Position then return hit.Position end
         local camera, forward = FreeCam.GetPosition(), FreeCam.GetForward()
-        local distance = PropSpawner.PreviewDistance.value
+        local distance = PropSpawner.PreviewDistance
         return { x = camera.x + forward.x * distance, y = camera.y + forward.y * distance, z = camera.z + forward.z * distance }
     end
 
@@ -171,6 +179,40 @@ function Layout.Duplicate(entity, name, mode, onDone)
         onto = { Parent = entity, ParentName = name, Position = { x = 0, y = 0, z = 0 }, Rotation = IDENTITY }
     end
     return Layout.Spawn(layout, nil, { Onto = onto, OnDone = onDone }) > 0
+end
+
+function Layout.TakeOnto(child, parent, onTaken)
+    local entity = child.Entity
+    if PropSpawner.IsPlaced(entity) or child.Kind == "Vehicle" or child.Kind == "Ped" or Attachments.HasChildren(entity) then return nil end
+
+    local entry = WorldEntry(entity, child.Name)
+    if not entry then return false end
+    local position, rotation = Entities.Pose(entity)
+    local localPosition, localRotation = Attachments.Offset(entity, parent.Entity)
+    if not position or not localPosition then return false end
+
+    local hidden = Physics.Hide(entity)
+    local layout = { Items = { { Entry = PlainEntry(entry), Position = position, Rotation = rotation } }, Links = {} }
+    local onto = { Parent = parent.Entity, ParentName = parent.Name, Position = localPosition, Rotation = localRotation }
+
+    local function Done(records)
+        local copy = records[1]
+        if copy and copy.Entity and Attachments.IsAttached(copy.Entity) then
+            copy.Original = { Entity = entity, Hidden = hidden }
+            Selection.Select({ Entity = copy.Entity, DisplayName = copy.Entry.Name, Kind = Physics.Classify(copy.Entity) })
+            if onTaken then onTaken(copy) end
+            return
+        end
+        if copy and copy.Entity then PropSpawner.Delete(copy.Entity) end
+        Physics.RestoreCollision(hidden)
+        if onTaken then onTaken(nil) end
+    end
+
+    if Layout.Spawn(layout, nil, { Onto = onto, OnDone = Done }) == 0 then
+        Physics.RestoreCollision(hidden)
+        return false
+    end
+    return true
 end
 
 function Layout.SelectRoot(records, layout)

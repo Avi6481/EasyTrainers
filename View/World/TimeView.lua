@@ -1,67 +1,125 @@
-local Buttons = require("UI/Options/Buttons")
-local Submenu = require("UI/Navigation/Submenu")
-local WorldTime = require("Features/World/WorldTime")
+local Ref = require("Core/Ref")
+local Submenu = require("Navigation/Submenu")
+local Widgets = require("Widgets/Widgets")
+local World = require("Features/World/World")
+local Time = require("Features/World/Time")
 
-local s_Hour = { value = 12, min = 0, max = 23, step = 1 }
-local s_Minute = { value = 0, min = 0, max = 59, step = 1 }
-local s_Second = { value = 0, min = 0, max = 59, step = 1 }
-local s_SkipDays = { value = 1, min = 1, max = 100, step = 1 }
-local s_SkipStep = { value = 500, min = 100, max = 5000, step = 100 }
+local TimeView = {}
 
-local function ApplyCustomTime()
-    WorldTime.SetGameTime(s_Hour.value, s_Minute.value, s_Second.value)
+local KEY = "time."
+
+local s_Clock = { Hours = 0, Minutes = 0, Seconds = 0 }
+local s_Hour = Ref.Field(s_Clock, "Hours")
+local s_Minute = Ref.Field(s_Clock, "Minutes")
+local s_Second = Ref.Field(s_Clock, "Seconds")
+local s_SkipDays = Ref.Field(Time, "SkipDays")
+local s_SkipStep = Ref.Field(Time, "SkipStep")
+local s_DaySpeed = Ref.Field(Time, "DaySpeed")
+local s_NightSpeed = Ref.Field(Time, "NightSpeed")
+local s_LapseSpeed = Ref.Field(Time, "LapseSpeed")
+local s_Modes = {}
+local s_Shown = { Signature = -1, Text24 = "", Text12 = "" }
+local s_PresetTimes = {}
+
+local function Mode(key)
+    local ref = s_Modes[key]
+    if not ref then
+        ref = Ref.New(function() return Time[key] end, function(value) Time.Set(key, value) end)
+        s_Modes[key] = ref
+    end
+    return ref
 end
 
-local function Format24(hour, minute, second)
-    return string.format("%02d:%02d:%02d", hour, minute, second)
-end
-
-local function Format12(hour, minute, second)
-    local hour12 = hour % 12
+local function Format12(hours, minutes, seconds)
+    local hour12 = hours % 12
     if hour12 == 0 then hour12 = 12 end
-    return string.format("%02d:%02d:%02d %s", hour12, minute, second, hour < 12 and "AM" or "PM")
+    return string.format("%02d:%02d:%02d %s", hour12, minutes, seconds, hours < 12 and "AM" or "PM")
 end
 
-local function ExclusiveToggle(label, ref, tipText)
-    Buttons.Toggle(label, ref, tipText, function(enabled) WorldTime.SetExclusiveMode(ref, enabled) end)
+local function Shown(hours, minutes, seconds)
+    local signature = (hours * 3600) + (minutes * 60) + seconds
+    if s_Shown.Signature ~= signature then
+        s_Shown.Signature = signature
+        s_Shown.Text24 = string.format("%02d:%02d:%02d", hours, minutes, seconds)
+        s_Shown.Text12 = Format12(hours, minutes, seconds)
+    end
+    return s_Shown
 end
 
-local function TimeView()
-    local time = WorldTime.GetTime()
-    s_Hour.value = time.hours
-    s_Minute.value = time.minutes
-
-    Buttons.OptionExtended(L("worldtime.currenttime24.label"), "", Format24(time.hours, time.minutes, time.seconds), L("worldtime.currenttime24.tip"))
-    Buttons.OptionExtended(L("worldtime.currenttime12.label"), "", Format12(time.hours, time.minutes, time.seconds), L("worldtime.currenttime12.tip"))
-
-    Buttons.Break("Set Custom Time")
-    Buttons.Int(L("worldtime.hour.label"), s_Hour, tip("worldtime.hour.tip", { formatted_time = Format12(s_Hour.value, 0, 0) }), ApplyCustomTime)
-    Buttons.Int(L("worldtime.minute.label"), s_Minute, L("worldtime.minute.tip"), ApplyCustomTime)
-    Buttons.Int(L("worldtime.second.label"), s_Second, L("worldtime.second.tip"), ApplyCustomTime)
-
-    Buttons.Break(L("worldtime.quickset.label"))
-    Buttons.Option(L("worldtime.setmorning.label"), L("worldtime.setmorning.tip"), WorldTime.SetTimeMorning)
-    Buttons.Option(L("worldtime.setnoon.label"), L("worldtime.setnoon.tip"), WorldTime.SetTimeNoon)
-    Buttons.Option(L("worldtime.setafternoon.label"), L("worldtime.setafternoon.tip"), WorldTime.SetTimeAfternoon)
-    Buttons.Option(L("worldtime.setevening.label"), L("worldtime.setevening.tip"), WorldTime.SetTimeEvening)
-    Buttons.Option(L("worldtime.setnight.label"), L("worldtime.setnight.tip"), WorldTime.SetTimeNight)
-
-    Buttons.Break(L("worldtime.skipmultiplier.label"))
-    Buttons.Int(L("worldtime.skipdays.label"), s_SkipDays, L("worldtime.skipdays.tip"))
-    Buttons.Int(L("worldtime.skipstepspeed.label"), s_SkipStep, L("worldtime.skipstepspeed.tip"))
-    Buttons.Option(L("worldtime.startskipping.label"), L("worldtime.startskipping.tip"), function()
-        WorldTime.SkipDays(s_SkipDays.value, s_SkipStep.value)
-    end)
-
-    Buttons.Break(L("worldtime.freezefast.label"))
-    ExclusiveToggle(L("worldtime.freezetime.label"), WorldTime.FreezeTime, L("worldtime.freezetime.tip"))
-    ExclusiveToggle(L("worldtime.synctopc.label"), WorldTime.SyncToSystemClock, L("worldtime.synctopc.tip"))
-    Buttons.Float(L("worldtime.fasterdayspeed.label"), WorldTime.DaySpeed, L("worldtime.fasterdayspeed.tip"))
-    Buttons.Float(L("worldtime.fasternightspeed.label"), WorldTime.NightSpeed, L("worldtime.fasternightspeed.tip"))
-
-    Buttons.Break(L("worldtime.timelapse.label"))
-    ExclusiveToggle(L("worldtime.enabletimelapse.label"), WorldTime.TimeLapse, L("worldtime.enabletimelapse.tip"))
-    Buttons.Int(L("worldtime.timelapsemultiplier.label"), WorldTime.TimeLapseMultiplier, L("worldtime.timelapsemultiplier.tip"))
+local function PresetTime(hours)
+    local text = s_PresetTimes[hours]
+    if not text then
+        text = string.format("%02d:00", hours)
+        s_PresetTimes[hours] = text
+    end
+    return text
 end
 
-return Submenu.Create("worldtime.title", TimeView)
+local function Toggle(key, mode)
+    Widgets.Toggle(L(KEY .. key .. ".label"), Mode(mode))
+    Widgets.Tip(L(KEY .. key .. ".tip"))
+end
+
+local function Current()
+    local shown = Shown(Time.Clock())
+    Widgets.ValueRow(L(KEY .. "current24.label"), shown.Text24)
+    Widgets.Tip(L(KEY .. "current24.tip"))
+    Widgets.ValueRow(L(KEY .. "current12.label"), shown.Text12)
+    Widgets.Tip(L(KEY .. "current12.tip"))
+end
+
+local function SetTime()
+    Widgets.Break(L(KEY .. "settime"))
+    s_Clock.Hours, s_Clock.Minutes, s_Clock.Seconds = Time.Clock()
+
+    local changed = Widgets.SliderInt(L(KEY .. "hour.label"), s_Hour, 0, 23, 1, "%02d")
+    if Widgets.Selected() then Widgets.Tip(tip(KEY .. "hour.tip", { time = Format12(s_Clock.Hours, 0, 0) })) end
+    changed = Widgets.SliderInt(L(KEY .. "minute.label"), s_Minute, 0, 59, 1, "%02d") or changed
+    Widgets.Tip(L(KEY .. "minute.tip"))
+    changed = Widgets.SliderInt(L(KEY .. "second.label"), s_Second, 0, 59, 1, "%02d") or changed
+    Widgets.Tip(L(KEY .. "second.tip"))
+
+    if changed then Time.SetClock(s_Clock.Hours, s_Clock.Minutes, s_Clock.Seconds) end
+end
+
+local function Presets()
+    Widgets.Break(L(KEY .. "presets"))
+    for _, preset in ipairs(Time.Presets) do
+        if Widgets.ValueRow(L(KEY .. preset.Key .. ".label"), PresetTime(preset.Hours), true) then Time.Preset(preset.Hours) end
+        Widgets.Tip(L(KEY .. preset.Key .. ".tip"))
+    end
+end
+
+local function Skip()
+    Widgets.Break(L(KEY .. "skip"))
+    if Widgets.NumberActionInt(L(KEY .. "skipdays.label"), s_SkipDays, 1, 100, 1, "%d") then Time.Skip() end
+    Widgets.Tip(L(KEY .. "skipdays.tip"))
+    Widgets.SliderInt(L(KEY .. "skipspeed.label"), s_SkipStep, 100, 5000, 100, "%d")
+    Widgets.Tip(L(KEY .. "skipspeed.tip"))
+end
+
+local function Speed()
+    Widgets.Break(L(KEY .. "speed"))
+    Toggle("freeze", "Freeze")
+    Toggle("sync", "Sync")
+    Widgets.SliderFloat(L(KEY .. "dayspeed.label"), s_DaySpeed, 1, 10, 0.5, "%.1fx", Mode("DayEnabled"))
+    Widgets.Tip(L(KEY .. "dayspeed.tip"))
+    Widgets.SliderFloat(L(KEY .. "nightspeed.label"), s_NightSpeed, 1, 10, 0.5, "%.1fx", Mode("NightEnabled"))
+    Widgets.Tip(L(KEY .. "nightspeed.tip"))
+    Widgets.SliderInt(L(KEY .. "lapse.label"), s_LapseSpeed, 1, 64, 1, "%dx", Mode("LapseEnabled"))
+    Widgets.Tip(L(KEY .. "lapse.tip"))
+end
+
+local function View()
+    World.Watch()
+
+    Current()
+    SetTime()
+    Presets()
+    Skip()
+    Speed()
+end
+
+TimeView.Menu = Submenu.Create("time.title", View)
+
+return TimeView
