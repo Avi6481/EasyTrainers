@@ -299,6 +299,8 @@
     "weapons": {
       "raygun": "Added the Raygun Supreme 9000.",
       "raygunfailed": "Couldn't add the Raygun Supreme 9000.",
+      "special": "Added {name}.",
+      "specialfailed": "Couldn't add {name}.",
       "givewall": "Added {count} stash wall weapons.",
       "giveiconic": "Added {count} iconic weapons.",
       "removeall": "Removed {count} weapons.",
@@ -948,6 +950,14 @@
     "smartfastprojectiles": { "label": "Fast Projectiles", "tip": "Smart bullets fly three times faster." },
     "smartlongrange": { "label": "Long Range", "tip": "Smart guns find targets four times farther away." },
     "raygun": { "label": "Give Raygun Supreme 9000", "tip": "Adds the toy raygun. It deals no damage, but it's fun to shoot." },
+    "special": {
+      "label": "Give {name}",
+      "stout": "Stout's legendary toy. Yes, it's a weapon.",
+      "rebecca": "Rebecca's shotgun from Edgerunners.",
+      "king": "King's revolver.",
+      "witcher": "The Witcher's sword.",
+      "sihil": "Sihil, the Witcher dwarven sword."
+    },
     "givewall": { "label": "Give All Wall Weapons", "tip": "Adds every weapon that fits your apartment stash wall." },
     "giveiconic": { "label": "Give All Iconic Weapons", "tip": "Adds every iconic weapon." },
     "removeall": { "label": "Remove All Weapons", "tip": "Hold to remove every weapon from your inventory." },
@@ -2084,7 +2094,7 @@
     "refillhealth": { "label": "Refill Health", "tip": "Keep your health topped up." },
     "combatregen": { "label": "Combat Regen", "tip": "Health regenerates during combat." },
     "nofalldamage": { "label": "No Fall Damage", "tip": "Land from any height without a hard landing." },
-    "armor": { "label": "Armor", "tip": "Add armor to cut incoming damage." },
+    "armor": { "label": "Armor", "tip": "Add armor to cut incoming damage. Small amounts go a long way.", "reduction": "Right now you take {percent}% less damage from hits." },
     "cyberware": "Cyberware",
     "quicksilver": { "label": "Quicksilver Sandevistan", "tip": "Your Sandevistan slows time much further and never runs out." },
     "refillram": { "label": "Refill RAM", "tip": "Keep your cyberdeck RAM topped up." },

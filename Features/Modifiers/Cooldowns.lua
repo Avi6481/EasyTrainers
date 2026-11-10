@@ -1,4 +1,5 @@
 local StatPools = require("Utils/StatPools")
+local StatModifiers = require("Utils/StatModifiers")
 
 local Cooldowns = {
     Healing = false,
@@ -23,11 +24,38 @@ local ABILITIES = {
     Healing = { Pool = "HealingItemsCharges" },
     Grenades = { Pool = "GrenadesCharges" },
     ProjectileLauncher = { Pool = "ProjectileLauncherCharges", Effects = { "BaseStatusEffect.ProjectileLauncherCooldown" } },
-    OpticalCamo = { Pool = "OpticalCamoCharges" },
-    Sandevistan = { Pool = "SandevistanCharge", Effects = { "BaseStatusEffect.SandevistanCooldown" } },
-    Berserk = { Pool = "BerserkCharge", Effects = { "BaseStatusEffect.BerserkCooldown" } },
-    Kerenzikov = { Effects = { "BaseStatusEffect.KerenzikovCooldown" } },
-    Overclock = { Pool = "CyberdeckOverclock" },
+    OpticalCamo = {
+        Pool = "OpticalCamoCharges", Below = 10,
+        Stats = {
+            { "OpticalCamoChargesDecayRateMult", "Additive", -1 },
+            { "OpticalCamoRechargeDuration", "Multiplier", 0.01 }
+        }
+    },
+    Sandevistan = {
+        Pool = "SandevistanCharge", Below = 10, Effects = { "BaseStatusEffect.SandevistanCooldown" },
+        Stats = {
+            { "TimeDilationSandevistanDuration", "Multiplier", 1000 },
+            { "SandevistanRechargeDuration", "Multiplier", 0.01 }
+        }
+    },
+    Berserk = {
+        Pool = "BerserkCharge", Below = 10, Effects = { "BaseStatusEffect.BerserkCooldown" },
+        Stats = {
+            { "BerserkChargesDecayRateMult", "Additive", -1 },
+            { "BerserkRechargeDuration", "Multiplier", 0.01 }
+        }
+    },
+    Kerenzikov = {
+        Effects = { "BaseStatusEffect.KerenzikovCooldown" },
+        Stats = { { "KerenzikovCooldownDuration", "Multiplier", 0.01 } }
+    },
+    Overclock = {
+        Pool = "CyberdeckOverclock", Below = 10,
+        Stats = {
+            { "CyberdeckOverclockDecayRate", "Multiplier", 0.001 },
+            { "CyberdeckOverclockCooldown", "Multiplier", 0.01 }
+        }
+    },
     Quickhacks = { Tag = "QuickHackCooldown" }
 }
 
@@ -53,8 +81,36 @@ local function Tag(name)
     return tag
 end
 
+local function BuildStats(ability)
+    return function()
+        local entries = {}
+        for _, stat in ipairs(ability.Stats) do
+            table.insert(entries, { gamedataStatType[stat[1]], gameStatModifierType[stat[2]], stat[3] })
+        end
+        return entries
+    end
+end
+
+local function SyncStats(player, key, enabled)
+    local ability = ABILITIES[key]
+    if not ability.Stats then return end
+    if not ability.Build then ability.Build = BuildStats(ability) end
+    StatModifiers.Sync("Cooldowns." .. key, enabled, 1, player:GetEntityID(), ability.Build)
+end
+
+local function RefillPool(ability)
+    local pool = gamedataStatPoolType[ability.Pool]
+    if not ability.Below then
+        StatPools.Refill(pool)
+        return
+    end
+
+    local value = StatPools.Get(pool)
+    if value and value < ability.Below then StatPools.Set(pool, 100) end
+end
+
 local function Clear(player, effects, ability)
-    if ability.Pool then StatPools.Refill(gamedataStatPoolType[ability.Pool]) end
+    if ability.Pool then RefillPool(ability) end
 
     for _, name in ipairs(ability.Effects or {}) do
         effects:RemoveStatusEffect(player:GetEntityID(), EffectID(name), 0)
@@ -67,6 +123,10 @@ function Cooldowns.Update(player)
     local now = os.clock()
     if now < s_Next then return end
     s_Next = now + INTERVAL
+
+    for _, key in ipairs(Cooldowns.Abilities) do
+        SyncStats(player, key, Cooldowns[key])
+    end
 
     local effects = Game.GetStatusEffectSystem()
     if not effects then return end

@@ -3,7 +3,7 @@ local Input = require("Core/Input")
 local State = require("Core/State")
 
 local EasyTrainer = {
-    Version = "2.4"
+    Version = "2.4.1"
 }
 
 local MAX_DELTA = 0.1

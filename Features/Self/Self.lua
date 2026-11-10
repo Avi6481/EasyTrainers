@@ -26,6 +26,7 @@ Self.NoFallDamage = require("Features/Self/NoFallDamage")
 Self.Armor = require("Features/Self/Armor")
 Self.Quicksilver = require("Features/Self/Quicksilver")
 Self.RefillRam = require("Features/Self/RefillRam")
+Self.LegacyCleanup = require("Features/Self/LegacyCleanup")
 
 local FEATURES = {
     { "GodMode", Self.GodMode, { "Enabled" } },
@@ -49,7 +50,8 @@ local FEATURES = {
     { "NoFallDamage", Self.NoFallDamage, { "Enabled" } },
     { "Armor", Self.Armor, { "Enabled", "Amount" } },
     { "Quicksilver", Self.Quicksilver, { "Enabled" } },
-    { "RefillRam", Self.RefillRam, { "Enabled" } }
+    { "RefillRam", Self.RefillRam, { "Enabled" } },
+    { "LegacyCleanup", Self.LegacyCleanup, {} }
 }
 
 local s_Failed = {}

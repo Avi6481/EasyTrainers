@@ -14,17 +14,18 @@ local ACTIVE = "Active"
 local SECTIONS = {
     { Id = "FastTravel", Group = "Locations", Mode = ALL, Key = "fasttravel", Variants = { "FastTravelVariant" } },
     { Id = "Metro", Group = "Locations", Mode = ALL, Key = "metro", Variants = { "Zzz17_NCARTVariant" } },
-    { Id = "Apartments", Group = "Locations", Mode = ALL, Key = "apartments", Variants = { "ApartmentVariant" } },
+    { Id = "Apartments", Group = "Locations", Mode = ALL, Key = "apartments", Variants = { "ApartmentVariant", "Zzz05_ApartmentToPurchaseVariant" } },
     { Id = "Guns", Group = "Vendors", Mode = ALL, Variants = { "ServicePointGunsVariant" } },
-    { Id = "Melee", Group = "Vendors", Mode = ALL, Variants = { "ServicePointMeleeTrainerVariant" } },
-    { Id = "Clothes", Group = "Vendors", Mode = ALL, Variants = { "ServicePointClothesVariant" } },
     { Id = "Ripperdoc", Group = "Vendors", Mode = ALL, Variants = { "ServicePointRipperdocVariant" } },
-    { Id = "Glamdoc", Group = "Vendors", Mode = ALL, Variants = { "Zzz21_ServicePointGlamdocVariant" } },
-    { Id = "Netrunner", Group = "Vendors", Mode = ALL, Variants = { "ServicePointNetTrainerVariant" } },
-    { Id = "Tech", Group = "Vendors", Mode = ALL, Variants = { "ServicePointTechVariant" } },
-    { Id = "Cyberware", Group = "Vendors", Mode = ALL, Variants = { "ServicePointCyberwareVariant" } },
     { Id = "Meds", Group = "Vendors", Mode = ALL, Variants = { "ServicePointMedsVariant" } },
-    { Id = "Merchant", Group = "Vendors", Mode = ALL, Variants = { "WanderingMerchantVariant" } },
+    { Id = "Clothes", Group = "Vendors", Mode = ALL, Variants = { "ServicePointClothesVariant" } },
+    { Id = "Food", Group = "Vendors", Mode = ALL, Variants = { "ServicePointFoodVariant" } },
+    { Id = "Bar", Group = "Vendors", Mode = ALL, Variants = { "ServicePointBarVariant" } },
+    { Id = "Junk", Group = "Vendors", Mode = ALL, Variants = { "ServicePointJunkVariant" } },
+    { Id = "Netrunner", Group = "Vendors", Mode = ALL, Variants = { "ServicePointNetTrainerVariant" } },
+    { Id = "Melee", Group = "Vendors", Mode = ALL, Variants = { "ServicePointMeleeTrainerVariant" } },
+    { Id = "BlackMarket", Group = "Vendors", Mode = ALL, Variants = { "Zzz14_ServicePointBlackMarketVariant" } },
+    { Id = "Joytoys", Group = "Vendors", Mode = ALL, Variants = { "ServicePointProstituteVariant" } },
     {
         Id = "Gigs", Group = "Activities", Mode = ACTIVE, Key = "gigs", Breaks = true,
         Variants = {
@@ -41,6 +42,7 @@ local SECTIONS = {
     },
     { Id = "Sandbox", Group = "Activities", Mode = ACTIVE, Variants = { "Zzz09_CourierSandboxActivityVariant" } },
     { Id = "Racing", Group = "Activities", Mode = ACTIVE, Variants = { "Zzz18_RacingVariant" } },
+    { Id = "Tarot", Group = "Activities", Mode = ACTIVE, Variants = { "TarotVariant" } },
     { Id = "Quests", Group = "Activities", Mode = ACTIVE, Key = "quests", Breaks = true, Variants = { "DefaultQuestVariant", "QuestionMarkVariant", "ExclamationMarkVariant" } }
 }
 
@@ -49,6 +51,8 @@ local CAPTURED = "Data/CapturedPins.json"
 local TARGETS = { "Map", "World", "Minimap" }
 local FAST_TRAVEL = "FastTravelVariant"
 local METRO = "Zzz17_NCARTVariant"
+local APARTMENT = "ApartmentVariant"
+local FRONT_DESK = "Zzz05_ApartmentToPurchaseVariant"
 local SAME_SPOT = 5
 
 local s_ByName = nil
@@ -205,6 +209,38 @@ local function Listed(kind, status, undiscovered)
     return status ~= "undiscovered" or undiscovered
 end
 
+local function VendorName(hash)
+    local ok, text = pcall(function()
+        local entry = Game.GetJournalManager():GetEntry(hash)
+        if not entry then return nil end
+        local id = entry:GetId()
+        if not id or id == "" then return nil end
+        local record = TweakDBInterface.GetVendorRecord(TweakDBID.new("Vendors." .. id))
+        if not record then return nil end
+        return GameText.Get(record:LocalizedName(), nil)
+    end)
+    if ok and text and not text:find("^LocKey") then return text end
+    return nil
+end
+
+local function PinName(kind, pin)
+    if pin.name then return pin.name end
+    local title = pin.title and GameText.Get(pin.title, nil)
+    if title and not title:find("^LocKey") then return title end
+
+    local area = pin.area or pin.district
+    if area then
+        if kind.Name == APARTMENT then return area .. " Apartment" end
+        if kind.Name == FRONT_DESK then return area .. " Front Desk" end
+        if kind.Section.Group == "Vendors" then
+            local vendor = VendorName(pin.hash)
+            if vendor then return vendor .. " - " .. area end
+        end
+        return area
+    end
+    return kind.Label
+end
+
 local function Expansion()
     local ok, installed = pcall(Game.IsEP1)
     return not ok or installed == true
@@ -218,7 +254,7 @@ local function Static(state, system, undiscovered)
             local status = Status(system, pin.hash)
             if Listed(kind, status, undiscovered) then
                 Add(state, kind, {
-                    Name = pin.name or (pin.title and GameText.Get(pin.title, nil)) or pin.area or pin.district or kind.Label,
+                    Name = PinName(kind, pin),
                     District = pin.district,
                     Area = pin.area,
                     Status = status,

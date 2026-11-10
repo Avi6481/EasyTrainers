@@ -53,10 +53,10 @@ function Police.SetLevel(level)
     return Instruction(EPreventionSystemInstruction.Active, level)
 end
 
-function Police.Limit(owner, min, max)
+function Police.Limit(owner, min, max, quiet)
     if not Limiter(min, max, false) then return false end
     s_Owner = owner
-    Logger.Log(string.format("Police: heat held between %d and %d for %s", min, max, owner))
+    if not quiet then Logger.Log(string.format("Police: heat held between %d and %d for %s", min, max, owner)) end
     return true
 end
 

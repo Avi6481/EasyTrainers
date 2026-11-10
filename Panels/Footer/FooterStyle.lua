@@ -1,7 +1,7 @@
 local FooterStyle = {}
 
 function FooterStyle.Initialize()
-    FooterStyle.Version = "v2.4"
+    FooterStyle.Version = "v2.4.1"
     FooterStyle.ShowDevice = true
     FooterStyle.ShowVersion = true
     FooterStyle.ShowArrows = true

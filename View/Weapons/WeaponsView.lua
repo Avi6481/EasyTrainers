@@ -112,6 +112,11 @@ local function Management()
     local manage = Weapons.Management
     Widgets.Break(L(KEY .. "management"))
     Manage("raygun", manage.GiveRaygun)
+    for _, special in ipairs(manage.Specials) do
+        local pressed = Widgets.Button(tip(KEY .. "special.label", { name = manage.SpecialName(special) }))
+        Widgets.Tip(L(KEY .. "special." .. special.Key))
+        if pressed then Weapons.Run(manage.GiveSpecial(special)) end
+    end
     Manage("givewall", manage.GiveWall)
     Manage("giveiconic", manage.GiveIconic)
     Manage("removeall", manage.RemoveAll, true)

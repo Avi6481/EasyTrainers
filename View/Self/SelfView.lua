@@ -79,7 +79,11 @@ local function View()
     Toggle("self.refillhealth", s_RefillHealth)
     Toggle("self.combatregen", s_CombatRegen)
     Toggle("self.nofalldamage", s_NoFallDamage)
-    SliderInt("self.armor", s_Armor, 250, 5000, 250, "%d", s_ArmorOn)
+    Widgets.SliderInt(L("self.armor.label"), s_Armor, Self.Armor.Min, Self.Armor.Max, 50, "+%d", s_ArmorOn)
+    local armorTip = L("self.armor.tip")
+    local reduction = Self.Armor.Reduction()
+    if reduction then armorTip = armorTip .. " " .. tip("self.armor.reduction", { percent = string.format("%.0f", reduction) }) end
+    Widgets.Tip(armorTip)
 
     Widgets.Break(L("self.cyberware"))
     Toggle("self.quicksilver", s_Quicksilver)
