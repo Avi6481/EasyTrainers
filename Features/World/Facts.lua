@@ -1,10 +1,13 @@
+local Logger = require("Core/Logger")
 local Notify = require("Utils/Notify")
 local GameFacts = require("Features/World/GameFacts")
 
 local Facts = {
     Values = {},
     Pending = {},
-    Custom = { Name = "", Value = nil }
+    Custom = { Name = "", Value = nil },
+    KeepCensorship = false,
+    Kept = {}
 }
 
 Facts.Categories = {
@@ -114,6 +117,7 @@ Facts.Categories = {
     },
     {
         Key = "censorship",
+        Keep = true,
         Facts = {
             { Key = "nudity", Name = "censorship_nudity" },
             { Key = "suggestive", Name = "censorship_suggestive" },
@@ -128,11 +132,32 @@ Facts.Categories = {
 
 local REFRESH_INTERVAL = 0.5
 local WATCH_TIME = 1
+local KEEP_INTERVAL = 2
 local MAX_NAME = 128
 
 local s_Queue = {}
 local s_WatchUntil = 0
 local s_NextRefresh = 0
+local s_NextKeep = 0
+local s_Keepable = {}
+
+for _, category in ipairs(Facts.Categories) do
+    if category.Keep then
+        for _, fact in ipairs(category.Facts) do s_Keepable[fact.Name] = true end
+    end
+end
+
+function Facts.SetKeep(enabled)
+    Facts.KeepCensorship = enabled
+    Facts.Kept = {}
+    s_NextKeep = 0
+    if not enabled then return end
+
+    for name in pairs(s_Keepable) do
+        local value = Facts.Values[name]
+        if value then Facts.Kept[name] = value end
+    end
+end
 
 function Facts.Watch()
     local now = os.clock()
@@ -160,6 +185,7 @@ function Facts.Set(name, value)
     Facts.Values[name] = value
     Facts.Pending[name] = nil
     if name == Facts.Custom.Name then Facts.Custom.Value = value end
+    if Facts.KeepCensorship and s_Keepable[name] then Facts.Kept[name] = value end
     table.insert(s_Queue, { Name = name, Value = value })
 end
 
@@ -213,7 +239,24 @@ local function Refresh(quests)
     end
 end
 
+local function Keep(now)
+    if now < s_NextKeep then return end
+    s_NextKeep = now + KEEP_INTERVAL
+
+    local quests = Game.GetQuestsSystem()
+    if not quests then return end
+
+    for name, value in pairs(Facts.Kept) do
+        if s_Keepable[name] and quests:GetFactStr(name) ~= value then
+            quests:SetFactStr(name, value)
+            Facts.Values[name] = value
+            Logger.Log(string.format("Facts: set %s back to %d", name, value))
+        end
+    end
+end
+
 function Facts.Update(now)
+    if Facts.KeepCensorship then Keep(now) end
     if now >= s_WatchUntil and #s_Queue == 0 and not GameFacts.Busy() then return end
 
     GameFacts.Load()
@@ -235,6 +278,7 @@ end
 function Facts.Reset()
     s_Queue = {}
     s_NextRefresh = 0
+    s_NextKeep = 0
     Facts.Values = {}
     Facts.Pending = {}
     Facts.Custom.Value = nil

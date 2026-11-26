@@ -5,6 +5,7 @@ local Layout = require("Features/WorldEditor/Layout")
 local Saves = {}
 
 local PATH = "Config/WorldEditorSaves.json"
+local ROOT_PATH = "WorldEditorSaves.json"
 local LEGACY_PATH = "Config/JSON/WorldEditorSaves.json"
 local VERSION = 1
 
@@ -18,7 +19,7 @@ end
 
 local function Load()
     if s_List then return s_List end
-    s_List = Read(PATH)
+    s_List = Read(PATH) or Read(ROOT_PATH)
     if not s_List then
         s_List = Read(LEGACY_PATH) or {}
         if #s_List > 0 then Logger.Log(string.format("WorldEditor: read %d saves from %s", #s_List, LEGACY_PATH)) end
@@ -27,7 +28,8 @@ local function Load()
 end
 
 local function Write()
-    return JsonHelper.Write(PATH, { Version = VERSION, Saves = Load() }) == true
+    local data = { Version = VERSION, Saves = Load() }
+    return JsonHelper.Write(PATH, data) == true or JsonHelper.Write(ROOT_PATH, data) == true
 end
 
 local function Clean(name)

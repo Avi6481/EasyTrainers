@@ -9,7 +9,7 @@ World.Facts = require("Features/World/Facts")
 local FEATURES = {
     { "Time", World.Time, { "Freeze", "Sync", "DayEnabled", "DaySpeed", "NightEnabled", "NightSpeed", "LapseEnabled", "LapseSpeed", "SkipDays", "SkipStep" } },
     { "Weather", World.Weather, { "Freeze", "Blend" } },
-    { "Facts", World.Facts, {} }
+    { "Facts", World.Facts, { "KeepCensorship", "Kept" } }
 }
 
 local WATCH_TIME = 1

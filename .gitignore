@@ -3,3 +3,7 @@ db.sqlite3
 Config/*
 !Config/.gitkeep
 CHANGELOG-2.4.md
+/Settings.json
+/Options.json
+/WorldEditorSaves.json
+*.bak

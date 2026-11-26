@@ -32,6 +32,12 @@ local s_CustomValueRef = Ref.Field(s_CustomValue, "Value")
 local s_CustomDoc = nil
 local s_CustomSignature = nil
 
+local s_KeepRef = Ref.New(function()
+    return Facts.KeepCensorship
+end, function(value)
+    Facts.SetKeep(value)
+end)
+
 local s_RowFact = nil
 local s_RowRef = Ref.New(function()
     return Facts.Shown(s_RowFact.Name)
@@ -133,6 +139,10 @@ local function CategoryMenu(category)
 
     return Submenu.Create(CATEGORIES .. category.Key .. ".label", function()
         Facts.Watch()
+        if category.Keep then
+            Widgets.Toggle(L(KEY .. "keep.label"), s_KeepRef)
+            Widgets.Tip(L(KEY .. "keep.tip"))
+        end
         for index, fact in ipairs(category.Facts) do FactRow(fact, entries[index]) end
     end)
 end

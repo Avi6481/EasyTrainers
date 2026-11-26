@@ -1333,6 +1333,7 @@
   },
   "facts": {
     "title": "Game Facts",
+    "keep": { "label": "Keep After Loading", "tip": "Set these again every time a save loads." },
     "categories": {
       "romance": { "label": "Romance", "tip": "Romance options and relationships." },
       "johnny": { "label": "Johnny and Jackie", "tip": "Johnny's friendship and Jackie's send-off." },

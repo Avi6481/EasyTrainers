@@ -60,7 +60,21 @@ function Config.New(path)
 end
 
 function Config:Load()
-    local data = JsonHelper.LoadOrCreate(self.Path, {})
+    local data = JsonHelper.ReadOptional(self.Path)
+    if type(data) ~= "table" then
+        local root = self.Path:match("[^/\\]+$") or self.Path
+        local old = root ~= self.Path and JsonHelper.ReadOptional(root) or nil
+        data = JsonHelper.LoadOrCreate(self.Path, type(old) == "table" and old or {})
+
+        if type(data) ~= "table" and root ~= self.Path then
+            data = JsonHelper.LoadOrCreate(root, {})
+            if type(data) == "table" then
+                Logger.Log("Couldn't write " .. self.Path .. ", saving to " .. root .. " instead")
+                self.Path = root
+            end
+        end
+    end
+
     self.Saved = type(data) == "table" and data or {}
     self.Locked = type(data) ~= "table"
     if self.Locked then Logger.Error("Couldn't read " .. self.Path .. ", so changes this session won't be saved") end

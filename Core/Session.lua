@@ -3,11 +3,14 @@ local Logger = require("Core/Logger")
 local Session = {}
 
 local CHECK_INTERVAL = 0.25
+local LOAD_TIMEOUT = 30
 
 local s_Loaded = false
 local s_Hud = false
 local s_FirstCheck = true
 local s_NewPlayer = false
+local s_Loading = false
+local s_LoadingUntil = 0
 local s_NextCheck = 0
 local s_Listeners = {}
 
@@ -30,10 +33,26 @@ local function Notify(loaded, reason)
     for _, callback in ipairs(s_Listeners) do callback(loaded) end
 end
 
+local function End(reason)
+    s_Loading = true
+    s_LoadingUntil = os.clock() + LOAD_TIMEOUT
+    if s_Loaded then Notify(false, reason) end
+end
+
 function Session.Initialize()
     Observe("PlayerPuppet", "OnGameAttached", function(player)
         if player:IsReplacer() then return end
         s_NewPlayer = true
+    end)
+    Observe("PlayerPuppet", "OnDetach", function(player)
+        if player:IsReplacer() then return end
+        End("ended (player detached)")
+    end)
+    Observe("LoadGameMenuGameController", "LoadSaveInGame", function()
+        End("ended (loading a save)")
+    end)
+    Observe("LoadGameMenuGameController", "OnLoadSaveInGameCanceled", function()
+        s_Loading = false
     end)
     Observe("QuestTrackerGameController", "OnInitialize", function() s_Hud = true end)
     Observe("QuestTrackerGameController", "OnUninitialize", function() s_Hud = false end)
@@ -48,13 +67,21 @@ function Session.Update()
     if not s_NewPlayer and now < s_NextCheck then return end
     s_NextCheck = now + CHECK_INTERVAL
 
+    local newPlayer = s_NewPlayer
+    if newPlayer then
+        s_NewPlayer = false
+        s_Loading = false
+    elseif s_Loading then
+        if now < s_LoadingUntil then return end
+        s_Loading = false
+    end
+
     local loaded = Loaded()
     if s_FirstCheck then
         s_FirstCheck = false
         if loaded then s_Hud = true end
     end
-    if s_NewPlayer then
-        s_NewPlayer = false
+    if newPlayer then
         Notify(loaded, "new player")
         return
     end

@@ -37,9 +37,10 @@ function Features.Initialize()
     Each("Initialize")
 
     Session.Initialize()
-    Session.Listen(function()
+    Session.Listen(function(loaded)
         Hotkeys.Reset()
         Each("Reset")
+        if not loaded and collectgarbage then collectgarbage() end
     end)
 end
 
